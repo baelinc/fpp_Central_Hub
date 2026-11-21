@@ -107,7 +107,7 @@
         '<div class="hb-np"><div class="hb-np-t" data-b="npT">—</div><div class="hb-np-s" data-b="npS"></div><div class="hb-bar"><i data-b="bar"></i></div><div class="hb-np-time"><span data-b="el">0:00</span><span data-b="rem"></span></div></div>' +
         '<div class="hb-row" data-ctl data-play><select class="hb-sel" data-b="pl"><option value="">Select playlist…</option></select><button class="hb-btn primary" data-act="start">' + icon('play', 14) + '<span>Start</span></button></div>' +
         '<div class="hb-row" data-ctl data-play><button class="hb-btn" data-act="stop">' + icon('stop', 14) + '<span>Stop</span></button><button class="hb-btn ghost" data-act="stopgraceful">Gentle stop</button><label class="hb-chk"><input type="checkbox" data-b="repeat"> Repeat</label></div>' +
-        '<div class="hb-row hb-vol" data-ctl>' + icon('volume', 16) + '<input type="range" min="0" max="100" data-b="vol"><span data-b="volv" class="hb-mono">–</span></div>' +
+        (d.hasAudio ? '<div class="hb-row hb-vol" data-ctl>' + icon('volume', 16) + '<input type="range" min="0" max="100" data-b="vol"><span data-b="volv" class="hb-mono">–</span></div>' : '') +
         '<div class="hb-chips" data-b="chips"></div>' +
         '<div class="hb-link" data-b="link"></div>';
       foot = openBtn(d, 'Open FPP') + '<button class="hb-btn" data-act="pages">' + icon('list', 16) + '<span>Pages</span></button><button class="hb-btn" data-act="test" data-ctl title="Run a channel test pattern">' + icon('zap', 16) + '<span>Test</span></button><button class="hb-btn" data-act="power" data-ctl>' + icon('power', 16) + '<span>Power</span></button>';
@@ -634,11 +634,14 @@
     if (a === 'none') { S.sel.clear(); document.querySelectorAll('[data-selbox]').forEach((c) => (c.checked = false)); return renderSelbar(); }
     if (a === 'all') { document.querySelectorAll('.hb-card').forEach((c) => { S.sel.add(c.dataset.id); c.querySelector('[data-selbox]').checked = true; }); return renderSelbar(); }
     const ds = [...S.sel].map(dev).filter(Boolean);
-    const fpps = ds.filter((d) => d.kind === 'fpp'), plugs = ds.filter((d) => d.kind === 'plug');
+    let fpps = ds.filter((d) => d.kind === 'fpp'); const plugs = ds.filter((d) => d.kind === 'plug');
     if (a === 'on' || a === 'off') return runBulk(plugs, a, { outlet: '*' });
     if (a === 'stop') return runBulk(fpps, 'stop', {});
     if (a === 'restart_fppd' || a === 'reboot') { if (!(await H.confirm(a === 'reboot' ? 'Reboot ' + fpps.length + ' player(s)?' : 'Restart FPPD on ' + fpps.length + ' player(s)?', 'Yes', true))) return; return runBulk(fpps, a, {}); }
     if (a === 'volume') {
+      const aud = fpps.filter((d) => d.hasAudio);
+      if (!aud.length) return H.toast('None of the selected players is marked as having audio / an FM transmitter (Edit → Audio)', 'err');
+      fpps = aud;
       return H.modal({ title: 'Set volume on ' + fpps.length + ' player(s)', html: '<div class="hb-form"><label>Volume <b id="hb-bv">50</b>%<input type="range" min="0" max="100" value="50" id="hb-bvr"></label></div>', onOpen: (m) => { const r = m.body.querySelector('#hb-bvr'); r.oninput = () => (m.body.querySelector('#hb-bv').textContent = r.value); },
         buttons: [{ label: 'Cancel', cls: 'ghost' }, { label: 'Apply', cls: 'primary', onClick: (m) => runBulk(fpps, 'volume', { value: +m.body.querySelector('#hb-bvr').value }) }] });
     }
@@ -777,6 +780,7 @@
       '<div class="hb-two"><label>Type<select id="hb-et" class="hb-sel">' + typeOptions(d.kind, d.type) + '</select></label><label>Group<input id="hb-eg" value="' + esc(d.group || '') + '" list="hb-glist"></label></div>' +
       '<datalist id="hb-glist">' + [...new Set(S.cfg.devices.map((x) => x.group).filter(Boolean))].map((g) => '<option value="' + esc(g) + '">').join('') + '</datalist>' +
       (d.kind !== 'plug' ? '<div class="hb-two"><label>Powered by plug <small>(enables Power cycle)</small><select id="hb-elp" class="hb-sel"><option value="">— none —</option>' + plugs.map((p) => '<option value="' + esc(p.id) + '"' + (p.id === lp.id ? ' selected' : '') + '>' + esc(p.name) + ' (' + esc(p.ip) + ')</option>').join('') + '</select></label><label>Outlet<select id="hb-elo" class="hb-sel"></select></label></div>' : '') +
+      (d.kind === 'fpp' ? '<label class="hb-chk"><input type="checkbox" id="hb-eaud"' + (d.hasAudio ? ' checked' : '') + '> This player has audio output or an FM transmitter <small>(shows the volume control)</small></label>' : '') +
       '<label>Notes<textarea id="hb-eno" rows="2">' + esc(d.notes || '') + '</textarea></label>' + extraSections(d) + '</div>';
     H.modal({
       title: 'Edit ' + d.name, html, wide: true,
@@ -796,6 +800,7 @@
         label: 'Save', cls: 'primary', onClick: async (m) => {
           const $ = (s) => m.body.querySelector(s);
           const patch = { name: $('#hb-en').value, ip: $('#hb-eip').value, port: +$('#hb-ep').value || 80, type: $('#hb-et').value, group: $('#hb-eg').value, notes: $('#hb-eno').value };
+          if ($('#hb-eaud')) patch.hasAudio = $('#hb-eaud').checked;
           if ($('#hb-elp')) patch.linkedPlug = $('#hb-elp').value ? { id: $('#hb-elp').value, outlet: $('#hb-elo').value || '*' } : null;
           Object.assign(patch, collectExtra(m, d));
           const r = await H.api('device_update', { id: d.id, patch });

@@ -263,6 +263,9 @@ try {
                     if (isset($patch['notes'])) {
                         $d['notes'] = hub_substr(trim($patch['notes']), 0, 500);
                     }
+                    if (isset($patch['hasAudio']) && $d['kind'] === 'fpp') {
+                        $d['hasAudio'] = (bool) $patch['hasAudio'];
+                    }
                     if (isset($patch['hidden'])) {
                         $d['hidden'] = (bool) $patch['hidden'];
                     }

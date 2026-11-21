@@ -174,6 +174,13 @@
     if (opts.accent) root.style.setProperty('--accent', opts.accent);
   };
 
+  Hub.updateFlow = async function (latest) {
+    if (!(await Hub.confirm('Update Central Hub to v' + latest + '? The page will reload.', 'Update now'))) return;
+    const t = Hub.toast('Updating…', 'info');
+    try { const r = await Hub.api('update_apply', {}); t.textContent = 'Updated – reloading'; setTimeout(() => location.reload(), 1200); return r; }
+    catch (e) { Hub.toast(e.message, 'err'); }
+  };
+
   Hub.openUrl = function (d) {
     if (d.local) return location.protocol + '//' + location.host + '/';
     const port = d.port && Number(d.port) !== 80 ? ':' + d.port : '';

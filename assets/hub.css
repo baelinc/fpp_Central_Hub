@@ -191,3 +191,4 @@ body.hb-idle.hb-page{cursor:none}
 .hb-stepbox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--panel2);border-radius:10px;padding:8px;margin-bottom:6px}.hb-stepbox .hb-sel{flex:1 1 130px}.hb-stepbox input{width:64px!important;flex:none}
 @media(max-width:820px){.hb-set{grid-template-columns:1fr}.hb-snav{flex-direction:row;overflow:auto;position:static}.hb-two{grid-template-columns:1fr}.hb-grid{grid-template-columns:1fr}.hb-brand{min-width:0}.hb-search{max-width:none}}
 @media(min-width:1700px){body.hb-page .hb-grid{grid-template-columns:repeat(auto-fill,minmax(380px,1fr))}}
+.hb-banner{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}.hb-banner span{flex:1}

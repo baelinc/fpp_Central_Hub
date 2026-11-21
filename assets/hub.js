@@ -691,6 +691,16 @@
       let idle; const hide = () => { document.body.classList.remove('hb-idle'); clearTimeout(idle); idle = setTimeout(() => document.body.classList.add('hb-idle'), 15000); };
       ['mousemove', 'touchstart', 'keydown'].forEach((ev) => document.addEventListener(ev, hide, { passive: true })); hide();
     }
+    if (!B.kiosk) {
+      H.api('update_check').then((u) => {
+        if (!u.available) return;
+        const b = document.createElement('div');
+        b.className = 'hb-banner';
+        b.innerHTML = icon('download', 16) + '<span>Central Hub <b>v' + esc(u.latest) + '</b> is available (you have v' + esc(u.current) + ').</span><button class="hb-btn sm primary">Update now</button>';
+        b.querySelector('button').addEventListener('click', () => H.updateFlow(u.latest));
+        root.querySelector('.hb-app').prepend(b);
+      }).catch(() => {});
+    }
     if (!B.kiosk && opt('autoScanOnLoad')) {
       const last = Math.max(0, ...Object.values(S.cfg.lastScan || {}).map((x) => x.t || 0));
       if (Date.now() / 1000 - last > 3600) scanFlow(['fpp', 'controller', 'plug'], true);

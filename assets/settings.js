@@ -8,7 +8,7 @@
     { k: 'controller', title: 'Lighting controllers', ico: 'cpu', hint: 'Kulp, Falcon / Baldrick, Experience Lights, Pixel2Things, Hanson Electronics, ESPixelStick (Forkineye), WLED.', ph: '192.168.80.0/24' },
     { k: 'plug', title: 'Smart plugs', ico: 'plug', hint: 'TP-Link Kasa (KP401 etc.), Tasmota and Shelly plugs – anything controlled locally, no cloud.', ph: '192.168.1.0/24' },
   ];
-  const NAV = [['net', 'Network ranges', 'search'], ['dev', 'Devices', 'list'], ['scn', 'Scenes', 'layers'], ['app', 'Appearance & behavior', 'sun'], ['kio', 'Kiosk & phone link', 'tv'], ['det', 'Detection rules', 'cpu'], ['bak', 'Backup & log', 'download']];
+  const NAV = [['net', 'Network ranges', 'search'], ['dev', 'Devices', 'list'], ['scn', 'Scenes', 'layers'], ['app', 'Appearance & behavior', 'sun'], ['kio', 'Kiosk & phone link', 'tv'], ['det', 'Detection rules', 'cpu'], ['bak', 'Backup & log', 'download'], ['upd', 'Updates', 'refresh']];
   const S = { cfg: null, types: {}, boot: null, tab: 'net', dirty: false, status: {} };
   const $ = (s, r) => (r || root).querySelector(s);
   const abs = (rel) => new URL(rel, location.href).href;
@@ -68,6 +68,7 @@
 
     panes.push(pane('bak', '<h3>Backup & log</h3><span class="hb-hint">Export all devices, ranges, scenes and settings as a file, or restore from one.</span><div class="hb-row" style="flex-wrap:wrap"><button class="hb-btn" data-export>' + icon('download', 16) + ' Export</button><label class="hb-btn" style="cursor:pointer">' + icon('upload', 16) + ' Import<input type="file" id="b-file" accept="application/json" hidden></label><button class="hb-btn danger" data-clearlog>Clear activity log</button></div>'));
 
+    panes.push(pane('upd', '<h3>Updates</h3><span class="hb-hint">Installed version <b>v' + esc(B.version) + '</b>. Checks github.com/baelinc/fpp_Central_Hub (the FPP needs internet access). FPP\'s Plugin Manager can also update this plugin.</span><div class="hb-row"><button class="hb-btn" id="u-check">' + icon('refresh', 16) + ' Check for updates</button><button class="hb-btn primary" id="u-apply" hidden>Update now</button></div><p class="hb-hint" id="u-msg" style="margin-top:10px"></p>'));
     $('#hb-panes').innerHTML = panes.join('');
     $('#o-theme').value = o.theme;
     $('#d-sig').value = JSON.stringify(S.cfg.signatures || S.boot.defaultSignatures, null, 1);
@@ -151,6 +152,12 @@
     });
     $('[data-clearlog]').addEventListener('click', async () => { await H.api('events_clear', {}); H.toast('Log cleared', 'ok'); });
     kioskUrl();
+    let latest = null;
+    $('#u-check').addEventListener('click', async () => {
+      $('#u-msg').textContent = 'Checking…';
+      try { const u = await H.api('update_check', null, 'force=1'); latest = u.latest; $('#u-apply').hidden = !u.available; $('#u-msg').textContent = u.error || (u.available ? 'Version ' + u.latest + ' is available.' : 'You are up to date (v' + u.current + ').'); } catch (e) { $('#u-msg').textContent = e.message; }
+    });
+    $('#u-apply').addEventListener('click', () => H.updateFlow(latest));
   }
 
   /* --------------------------------------------------------------- devices */

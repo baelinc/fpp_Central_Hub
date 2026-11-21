@@ -409,6 +409,38 @@ try {
             });
             hub_out(array('ok' => true, 'config' => HubStore::load()));
 
+        case 'update_check':
+            $state = HubStore::state();
+            $force = !empty($_GET['force']);
+            $u = isset($state['update']) ? $state['update'] : array('t' => 0);
+            if ($force || time() - (int) $u['t'] > 6 * 3600) {
+                $r = HubNet::http('https://raw.githubusercontent.com/baelinc/fpp_Central_Hub/main/VERSION?t=' . time(), 'GET', null, 6000);
+                $latest = trim($r['body']);
+                if ($r['code'] === 200 && preg_match('/^\d+\.\d+\.\d+$/', $latest)) {
+                    $u = array('t' => time(), 'latest' => $latest);
+                    $state['update'] = $u;
+                    HubStore::saveState($state);
+                } else {
+                    hub_out(array('ok' => true, 'current' => HubStore::VERSION, 'latest' => null, 'available' => false, 'error' => 'Could not reach GitHub (does this device have internet access?)'));
+                }
+            }
+            $latest = isset($u['latest']) ? $u['latest'] : null;
+            hub_out(array('ok' => true, 'current' => HubStore::VERSION, 'latest' => $latest, 'available' => $latest && version_compare($latest, HubStore::VERSION, '>')));
+
+        case 'update_apply':
+            $dir = __DIR__;
+            if (!is_dir($dir . '/.git') || !function_exists('shell_exec')) {
+                hub_fail('This install is not a git checkout, so it cannot update itself. Use FPP > Content Setup > Plugin Manager instead.');
+            }
+            $cmd = 'cd ' . escapeshellarg($dir) . ' && HOME=' . escapeshellarg(HubStore::dir()) . ' git -c safe.directory=' . escapeshellarg($dir) . ' pull --ff-only 2>&1';
+            $out = (string) shell_exec($cmd);
+            $state = HubStore::state();
+            unset($state['update']);
+            HubStore::addEvent($state, 'info', 'Update requested: ' . substr(trim($out), -120));
+            HubStore::saveState($state);
+            $ok = stripos($out, 'fatal') === false && stripos($out, 'error') === false;
+            hub_out(array('ok' => $ok, 'output' => $out, 'error' => $ok ? null : 'Update failed: ' . trim($out)));
+
         case 'events':
             $s = HubStore::state();
             hub_out(array('ok' => true, 'events' => array_reverse(array_slice($s['events'], -100))));

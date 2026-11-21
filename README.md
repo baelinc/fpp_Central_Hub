@@ -14,11 +14,52 @@ A Falcon Player (FPP) plugin that gives you one dashboard for your whole show ne
 * **Kiosk / phone view** – a standalone page with no FPP menus (`plugin.php?plugin=fpp_Central_Hub&page=kiosk.php&nopage=1`), with optional `&kind=plug|controller|fpp`, `&cols=N`, `&readonly=1`. Wake-lock, fullscreen, clock. Settings → *Kiosk & phone link* builds the URL for you.
 * **Auto-recovery watchdog** (background monitor, runs even when no page is open): per device, escalates **1) FPP API restart → 2) SSH command → 3) power-cycle the linked plug**. SSH login is per device or the default (`fpp`/`falcon`). Skipped steps are logged. It only acts while the device is supposed to be powered (inside the plug's **schedule**, or while the plug is on), never cycles a plug that also feeds other devices unless you allow it, and caps power cycles per 24 h. FPP players are also treated as unresponsive when FPPD is stopped or a "playing" playlist stops advancing.
 * **Plug schedules** (e.g. road-sign plug and controller plugs at 5:15 pm): optionally switched by the Hub, or "watch only" if FPP/Kasa already switches them.
+* **Test patterns** – a Test button on every Falcon Player: pick a model (or custom channel range), pattern and speed. **Lights off** button stops everything and blanks outputs on all FPPs and WLED controllers.
+* **Player / remote mode** – each FPP card shows PLAYER, REMOTE or BRIDGE; remote and bridge players hide the playlist controls. The volume control only appears on players you mark as having audio or an FM transmitter.
 * All settings live on their own page (Status/Control → *Central Hub Settings*).
 
-## Install
-FPP → *Content Setup → Plugin Manager*, install from this URL, or copy `pluginInfo.json`'s `srcURL`:
-`https://github.com/baelinc/fpp_Central_Hub`. Then open **Status/Control → Central Hub**, check Settings → Network ranges, and press **Scan**.
+## Install (step by step, for beginners)
+
+You need a working Falcon Player (FPP) on your network with internet access. You do **not** need to type any code for Option A.
+
+### Option A – install from the FPP web page (easiest)
+1. Open FPP in your browser (for example `http://fpp.local/` or the Pi's IP address).
+2. **Turn on the plugin URL box.** Go to **Settings → UI** and set **UI Level** to **Developer** (some versions call the levels Basic / Advanced / Developer). Save. FPP hides the "install from URL" box at the lower levels.
+3. Go to **Content Setup → Plugin Manager**.
+4. Find the box for the plugin's information URL and paste this exact address:
+
+   `https://raw.githubusercontent.com/baelinc/fpp_Central_Hub/main/pluginInfo.json`
+
+5. Press **Retrieve Plugin Info**, then **Install** when *FPP Central Hub* appears. Wait until FPP says it finished.
+6. Restart FPP when asked (or go to **Status/Control → Restart FPPD**).
+7. Open **Status/Control → Central Hub**. That is your dashboard. **Central Hub Settings** is right below it.
+
+### Option B – install over SSH (if the Plugin Manager can't find it)
+1. Open a terminal (Windows: *PowerShell* or *PuTTY*; Mac/Linux: *Terminal*) and connect: `ssh fpp@fpp.local` (default password `falcon`).
+2. Copy and paste these lines one at a time:
+   ```
+   cd /home/fpp/media/plugins
+   git clone https://github.com/baelinc/fpp_Central_Hub
+   sudo chown -R fpp:fpp fpp_Central_Hub
+   sudo systemctl restart fppd
+   ```
+3. Open **Status/Control → Central Hub** in FPP.
+
+### First-time setup (about 5 minutes)
+1. Open **Central Hub Settings → Network ranges**. The Hub fills in the network it is on. If your devices are on other networks, add them, one type per box, for example plugs on `192.168.1.0/24` and FPP and controllers on `192.168.80.0/24`. Save.
+2. Go back to the dashboard and press **Scan**. Cards appear for everything it finds. Anything missed can be added with **Add** (type its IP address and press *Test connection*).
+3. On each Falcon Player that has speakers or an FM transmitter, tick **Audio** (Settings → Devices) so its volume control shows.
+4. If you use the Christmas Lidar Counter, open its card menu → **Edit → Counter login** and enter the counter page password.
+5. For a phone, wall tablet or kiosk: **Settings → Kiosk & phone link**. Scan the QR code with your phone camera, then use *Add to Home Screen*. (Open Settings using the address your phone can reach, such as `fpp.local` or the IP, because the QR code uses the address you are browsing with.)
+
+### Updating
+**Central Hub Settings → Updates → Check / Update** (or SSH: `cd /home/fpp/media/plugins/fpp_Central_Hub && git pull`).
+If the update says *insufficient permission*, run once over SSH: `sudo chown -R fpp:fpp /home/fpp/media/plugins/fpp_Central_Hub`, then update again.
+
+### If something looks wrong
+* **Plugin not found in Plugin Manager** – check UI Level is *Developer* (step 2) or use Option B.
+* **No devices after Scan** – the address ranges don't include the devices' network, or FPP can't reach that network.
+* **A card says Offline** – the device is off, on a different network than the range you entered, or its IP address changed (give devices fixed IPs in your router).
 
 ## Notes & limits
 * Discovery is done by the Hub's server (not your browser), so the FPP must be able to route to every configured network.

@@ -340,7 +340,7 @@
     root.classList.toggle('compact', !!opt('compact'));
     H.applyTheme(root, S.cfg.options);
     const t = document.getElementById('hb-title');
-    if (t) t.textContent = B.kiosk ? S.cfg.options.kioskTitle || 'Light Show Hub' : 'Central Hub';
+    if (t) t.textContent = B.kiosk ? S.cfg.options.kioskTitle || 'Central Hub' : 'Central Hub';
     if (B.cols) root.style.setProperty('--hb-cols', B.cols);
   }
 

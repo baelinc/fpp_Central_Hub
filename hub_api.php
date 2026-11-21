@@ -107,10 +107,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $in = is_array($j) ? $j : array();
 }
 
-$mutating = array('scan', 'device_add', 'device_update', 'device_remove', 'act', 'settings_save', 'scene_save', 'scene_delete', 'import');
 $cfg = HubStore::load();
-if (in_array($action, $mutating, true) && isset($_SERVER['HTTP_X_HUB_MODE']) && $_SERVER['HTTP_X_HUB_MODE'] === 'kiosk' && !empty($cfg['options']['kioskReadOnly'])) {
-    hub_fail('Kiosk is in view-only mode', 403);
+$kioskReq = isset($_SERVER['HTTP_X_HUB_MODE']) && $_SERVER['HTTP_X_HUB_MODE'] === 'kiosk';
+if ($kioskReq) {
+    // Kiosk / remote sessions may only view, and (unless view-only) run device controls and scenes - never change configuration.
+    $viewActions = array('bootstrap', 'status', 'events', 'update_check');
+    $ctlActions = array('act');
+    $ro = !empty($cfg['options']['kioskReadOnly']);
+    if (!in_array($action, $viewActions, true) && !(in_array($action, $ctlActions, true) && !$ro)) {
+        hub_fail($ro ? 'Kiosk is in view-only mode' : 'Not available from the kiosk / remote view', 403);
+    }
+    if ($action === 'act' && isset($in['cmd']) && in_array($in['cmd'], array('reboot', 'shutdown', 'restart_fppd'), true)) {
+        hub_fail('Reboot, shutdown and restart are not available from the kiosk / remote view', 403);
+    }
 }
 
 try {

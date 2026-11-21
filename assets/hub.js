@@ -37,6 +37,7 @@
     if (!S.ro) {
       a.push('<button class="hb-btn" data-top="scan" title="Search the network for devices">' + icon('refresh', 16) + '<span>Scan</span></button>');
       a.push('<button class="hb-btn" data-top="add">' + icon('plus', 16) + '<span>Add</span></button>');
+      a.push('<button class="hb-btn' + (opt('watchdogEnabled') ? ' ok' : '') + '" data-top="watchdog" title="Master switch for automatic recovery of unresponsive devices">' + icon('pulse', 16) + '<span>Auto-recovery: ' + (opt('watchdogEnabled') ? 'On' : 'Off') + '</span></button>');
       a.push('<button class="hb-btn' + (S.selMode ? ' primary' : '') + '" data-top="select">' + icon('check', 16) + '<span>Select</span></button>');
     }
     a.push('<button class="hb-btn" data-top="events">' + icon('list', 16) + '<span>Activity</span></button>');
@@ -453,6 +454,9 @@
     Hub.menu(anchor, [
       { label: 'Edit / link plug', icon: 'edit', onClick: () => editDevice(d) },
       { label: 'Refresh now', icon: 'refresh', onClick: () => refreshOne(d.id) },
+      ...(d.kind !== 'plug' && !d.local ? [{ label: (d.watch && d.watch.enabled ? 'Disable' : 'Enable') + ' auto-recovery', icon: 'pulse', onClick: async () => {
+        try { const r = await H.api('device_update', { id: d.id, patch: { watch: { enabled: !(d.watch && d.watch.enabled) } } }); S.cfg = r.config; S.sigCfg = ''; renderAll(); H.toast('Auto-recovery ' + (d.watch && d.watch.enabled ? 'disabled' : 'enabled') + ' for ' + d.name, 'ok'); } catch (e) { H.toast(e.message, 'err'); }
+      } }] : []),
       { label: 'Copy address', icon: 'link', onClick: () => { try { navigator.clipboard.writeText(d.ip); H.toast('Copied ' + d.ip, 'ok'); } catch (e) { /* ignore */ } } },
       '-',
       { label: 'Hide from dashboard', icon: 'x', onClick: async () => { await H.api('device_update', { id: d.id, patch: { hidden: true } }); await reloadConfig(true); H.toast('Hidden – restore it in Settings → Devices', 'ok'); } },
@@ -551,6 +555,7 @@
     if (a === 'add') return addDevice();
     if (a === 'select') { S.selMode = !S.selMode; if (!S.selMode) S.sel.clear(); return renderAll(); }
     if (a === 'events') return showEvents();
+    if (a === 'watchdog') return toggleWatchdog();
     if (a === 'full') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
   }
 
@@ -754,6 +759,15 @@
     if ($('#w-shared')) watch.allowShared = $('#w-shared').checked;
     if ($('#w-froz')) { watch.frozen = $('#w-froz').checked; watch.freezeSec = +$('#w-fsec').value; }
     return { watch, ssh: { enabled: $('#s-en').checked, useDefault: $('#s-def').checked, user: $('#s-user').value, pass: $('#s-pass').value, port: +$('#s-port').value, command: $('#s-cmd').value } };
+  }
+
+  async function toggleWatchdog() {
+    const on = !opt('watchdogEnabled');
+    try {
+      const r = await H.api('settings_save', { options: { watchdogEnabled: on } });
+      S.cfg = r.config; S.sigCfg = JSON.stringify([S.cfg.devices, S.cfg.scenes, S.cfg.options]); renderActions();
+      H.toast('Auto-recovery ' + (on ? 'enabled' : 'disabled') + ' for all devices', on ? 'ok' : 'info');
+    } catch (e) { H.toast(e.message, 'err'); }
   }
 
   async function showEvents() {

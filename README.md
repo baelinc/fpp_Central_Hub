@@ -24,3 +24,6 @@ FPP → *Content Setup → Plugin Manager*, install from this URL, or copy `plug
 
 ## Layout
 `api.php` JSON API · `lib/` discovery + drivers · `dashboard.php`, `kiosk.php`, `settings.php` pages · `assets/` UI · `tests/` mock devices.
+
+## Author
+Johnathan Evans

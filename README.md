@@ -23,7 +23,7 @@ FPP → *Content Setup → Plugin Manager*, install from this URL, or copy `plug
 * Verified against simulated devices (FPP API, Kasa XOR protocol over TCP/UDP, Tasmota, ESPixelStick/Kulp pages). Shelly and real-hardware behaviour for the other vendors should be confirmed on your network – please open an issue with any device that is missed.
 
 ## Layout
-`api.php` JSON API · `lib/` discovery + drivers · `dashboard.php`, `kiosk.php`, `settings.php` pages · `assets/` UI · `tests/` mock devices.
+`hub_api.php` JSON API (deliberately not named api.php: FPP auto-loads any plugin api.php into its own REST API) · `lib/` discovery + drivers · `dashboard.php`, `kiosk.php`, `settings.php` pages · `assets/` UI · `tests/` mock devices.
 
 ## Author
 Johnathan Evans

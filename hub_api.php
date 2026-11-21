@@ -2,7 +2,7 @@
 /**
  * FPP Central Hub - JSON API.
  * Reached through FPP's plugin loader so it works both inside FPP and standalone:
- *   plugin.php?plugin=fpp_Central_Hub&page=api.php&nopage=1&action=...
+ *   plugin.php?plugin=fpp_Central_Hub&page=hub_api.php&nopage=1&action=...
  */
 require_once __DIR__ . '/lib/Drivers.php';
 

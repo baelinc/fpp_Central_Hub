@@ -105,6 +105,30 @@ function hub_validate_ranges(array $ranges)
     return $clean;
 }
 
+function hub_substr($s, $start, $len)
+{
+    return function_exists('mb_substr') ? mb_substr((string) $s, $start, $len) : substr((string) $s, $start, $len);
+}
+
+// Turn PHP warnings/fatals into a readable JSON error instead of a bare HTTP 500.
+set_error_handler(function ($no, $str, $file, $line) {
+    if (!(error_reporting() & $no)) {
+        return false;
+    }
+    throw new ErrorException($str, 0, $no, $file, $line);
+});
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR), true)) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => false, 'error' => 'Server error: ' . $e['message'] . ' (' . basename($e['file']) . ':' . $e['line'] . ')'));
+    }
+});
+
 // ------------------------------------------------------------------ dispatch
 set_time_limit(300);
 $action = isset($_GET['action']) ? (string) $_GET['action'] : '';
@@ -207,9 +231,9 @@ try {
                 $c['ignored'] = array_values(array_diff($c['ignored'], array($kind . '|' . $ip)));
                 $c['devices'][] = array(
                     'id' => $newId, 'kind' => $kind, 'type' => $type,
-                    'name' => !empty($in['name']) ? mb_substr(trim($in['name']), 0, 60) : ($types[$kind][$type]['label'] . ' ' . $ip),
+                    'name' => !empty($in['name']) ? hub_substr(trim($in['name']), 0, 60) : ($types[$kind][$type]['label'] . ' ' . $ip),
                     'ip' => $ip, 'port' => $port, 'uid' => isset($in['uid']) ? (string) $in['uid'] : '', 'model' => isset($in['model']) ? (string) $in['model'] : '',
-                    'group' => isset($in['group']) ? mb_substr(trim($in['group']), 0, 40) : '', 'notes' => '', 'manual' => true, 'hidden' => false,
+                    'group' => isset($in['group']) ? hub_substr(trim($in['group']), 0, 40) : '', 'notes' => '', 'manual' => true, 'hidden' => false,
                     'linkedPlug' => null, 'extra' => isset($in['extra']) && is_array($in['extra']) ? $in['extra'] : array(), 'local' => false,
                     'nameCustom' => !empty($in['name']), 'added' => time(), 'lastSeen' => 0,
                 );
@@ -227,7 +251,7 @@ try {
                         continue;
                     }
                     if (isset($patch['name'])) {
-                        $d['name'] = mb_substr(trim($patch['name']), 0, 60);
+                        $d['name'] = hub_substr(trim($patch['name']), 0, 60);
                         $d['nameCustom'] = true;
                     }
                     if (isset($patch['ip'])) {
@@ -240,10 +264,10 @@ try {
                         $d['port'] = max(1, min(65535, (int) $patch['port']));
                     }
                     if (isset($patch['group'])) {
-                        $d['group'] = mb_substr(trim($patch['group']), 0, 40);
+                        $d['group'] = hub_substr(trim($patch['group']), 0, 40);
                     }
                     if (isset($patch['notes'])) {
-                        $d['notes'] = mb_substr(trim($patch['notes']), 0, 500);
+                        $d['notes'] = hub_substr(trim($patch['notes']), 0, 500);
                     }
                     if (isset($patch['hidden'])) {
                         $d['hidden'] = (bool) $patch['hidden'];
@@ -352,7 +376,7 @@ try {
                     $o['accent'] = $opts['accent'];
                 }
                 if (isset($opts['kioskTitle'])) {
-                    $o['kioskTitle'] = mb_substr(trim($opts['kioskTitle']), 0, 60);
+                    $o['kioskTitle'] = hub_substr(trim($opts['kioskTitle']), 0, 60);
                 }
                 if ($sigs !== false) {
                     $c['signatures'] = is_array($sigs) && $sigs ? $sigs : null;
@@ -388,7 +412,7 @@ try {
                     'delay' => max(0, min(3600, (int) (isset($s['delay']) ? $s['delay'] : 0))),
                 );
             }
-            $scene = array('id' => !empty($sc['id']) ? (string) $sc['id'] : 's' . bin2hex(random_bytes(3)), 'name' => mb_substr(trim($sc['name']), 0, 50), 'icon' => isset($sc['icon']) ? mb_substr((string) $sc['icon'], 0, 4) : '', 'steps' => $steps);
+            $scene = array('id' => !empty($sc['id']) ? (string) $sc['id'] : 's' . bin2hex(random_bytes(3)), 'name' => hub_substr(trim($sc['name']), 0, 50), 'icon' => isset($sc['icon']) ? hub_substr((string) $sc['icon'], 0, 4) : '', 'steps' => $steps);
             HubStore::mutate(function (&$c) use ($scene) {
                 foreach ($c['scenes'] as $i => $s) {
                     if ($s['id'] === $scene['id']) {
@@ -471,6 +495,6 @@ try {
         default:
             hub_fail('Unknown action', 404);
     }
-} catch (Exception $e) {
-    hub_fail($e->getMessage());
+} catch (Throwable $e) {
+    hub_fail($e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
 }

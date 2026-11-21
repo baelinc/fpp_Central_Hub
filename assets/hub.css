@@ -137,7 +137,7 @@ body.hb-idle.hb-page{cursor:none}
 .hb-sel-box input{width:18px;height:18px;accent-color:var(--accent)}
 .hub.ro [data-ctl],.hub.ro [data-top=add]{display:none!important}
 .hub.ro .hb-bigpower{pointer-events:none}.hub.ro .hb-switch{pointer-events:none}
-.hub.compact .hb-c-body{gap:7px}.hub.compact .hb-grid{gap:10px}
+
 
 /* modal */
 .hb-ov{position:fixed;inset:0;background:rgba(3,7,18,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:99999;opacity:0;transition:opacity .2s;padding:16px}
@@ -197,3 +197,20 @@ body.hb-idle.hb-page{cursor:none}
 .hb-warnbox{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);font-size:12.5px}
 .hb-days{display:inline-flex;gap:3px}.hb-day{display:inline-block;cursor:pointer}.hb-day input{position:absolute;opacity:0;pointer-events:none}.hb-day span{display:inline-block;min-width:30px;text-align:center;padding:5px 0;border-radius:7px;background:var(--panel2);font-size:11.5px;color:var(--mut)}.hb-day input:checked+span{background:var(--accent);color:#04111f;font-weight:700}
 .hb-form label.hb-chk{color:var(--tx);font-weight:500;font-size:13px}
+
+/* compact cards */
+.hub.compact .hb-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.hub.compact[style*="--hb-cols"] .hb-grid{grid-template-columns:repeat(var(--hb-cols),minmax(0,1fr))}
+.hub.compact .hb-card{--r:12px}
+.hub.compact .hb-c-head{padding:10px 10px 4px 12px;gap:9px}
+.hub.compact .hb-c-ico{width:30px;height:30px;border-radius:9px}.hub.compact .hb-c-ico .hb-i{width:16px;height:16px}
+.hub.compact .hb-c-title h3{font-size:14px}
+.hub.compact .hb-c-body{padding:2px 12px 8px;gap:7px}
+.hub.compact .hb-c-foot{padding:8px 10px 10px}
+.hub.compact .hb-c-foot .hb-btn{padding:6px 10px;font-size:12px}
+.hub.compact .hb-chips,.hub.compact .hb-spark,.hub.compact .hb-note,.hub.compact .hb-kv,.hub.compact .hb-powers,.hub.compact .hb-np-s,.hub.compact .hb-pw{display:none}
+.hub.compact .hb-np{padding:7px 10px}.hub.compact .hb-np-t{font-size:13.5px}
+.hub.compact .hb-bigpower{width:48px;height:48px}.hub.compact .hb-bigpower .hb-i{width:22px;height:22px}
+.hub.compact .hb-plugmain{gap:12px}.hub.compact .hb-ps{font-size:18px}
+.hub.compact .hb-btn{padding:6px 10px}.hub.compact .hb-sel{padding:6px 8px}
+.hub.compact .hb-sec{margin-top:14px}

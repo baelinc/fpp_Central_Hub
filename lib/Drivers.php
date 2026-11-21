@@ -873,6 +873,10 @@ class HubDrivers
                 $r = HubNet::http($b . '/json/state', 'POST', '{"on":"t"}', 4000, array('Content-Type: application/json'));
                 return array($r['code'] == 200, $r['code'] == 200 ? 'Toggled' : 'WLED did not respond', null);
             }
+            if ($cmd === 'lights_off') {
+                $r = HubNet::http($b . '/json/state', 'POST', '{"on":false}', 4000, array('Content-Type: application/json'));
+                return array($r['code'] == 200, $r['code'] == 200 ? 'Lights off' : 'WLED did not respond', null);
+            }
             if ($cmd === 'reboot') {
                 $r = HubNet::http($b . '/json/state', 'POST', '{"rb":true}', 4000, array('Content-Type: application/json'));
                 return array($r['code'] == 200, $r['code'] == 200 ? 'Rebooting' : 'WLED did not respond', null);
@@ -922,6 +926,20 @@ class HubDrivers
                 $v = max(0, min(100, (int) (isset($args['value']) ? $args['value'] : 0)));
                 $r = self::fppGet($cfg, $d, '/api/system/volume', 'POST', json_encode(array('volume' => $v)));
                 return array($r['code'] >= 200 && $r['code'] < 300, 'Volume ' . $v . '%', null);
+            case 'lights_off':
+                // stop what is playing, cancel any test pattern, then FPP's own "All Lights Off" command to blank the outputs
+                $stop = self::fppGet($cfg, $d, '/api/playlists/stop');
+                self::fppGet($cfg, $d, '/api/testmode', 'POST', json_encode(array('enabled' => 0, 'mode' => 'RGBChase', 'subMode' => 'RGBChase-RGB', 'cycleMS' => 1000, 'colorPattern' => 'FF000000FF000000FF', 'channelSet' => '1-1048576', 'channelSetType' => 'channelRange')));
+                $off = false;
+                foreach (array('All Lights Off', 'Lights Off') as $name) {
+                    $r = self::fppGet($cfg, $d, '/api/command/' . rawurlencode($name));
+                    if ($r['code'] >= 200 && $r['code'] < 300) {
+                        $off = true;
+                        break;
+                    }
+                }
+                $stopped = $stop['code'] >= 200 && $stop['code'] < 300;
+                return array($off || $stopped, $off ? 'Lights off' : ($stopped ? 'Stopped (the All Lights Off command was not accepted)' : 'FPP did not respond'), null);
             case 'testmode_get':
                 $r = self::fppGet($cfg, $d, '/api/testmode');
                 $j = self::jsonBody($r);

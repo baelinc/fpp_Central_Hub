@@ -40,6 +40,7 @@
       a.push('<button class="hb-btn" data-top="scan" title="Search the network for devices">' + icon('refresh', 16) + '<span>Scan</span></button>');
       a.push('<button class="hb-btn" data-top="add">' + icon('plus', 16) + '<span>Add</span></button>');
       a.push('<button class="hb-btn' + (opt('watchdogEnabled') ? ' ok' : '') + '" data-top="watchdog" title="Master switch for automatic recovery of unresponsive devices">' + icon('pulse', 16) + '<span>Auto-recovery: ' + (opt('watchdogEnabled') ? 'On' : 'Off') + '</span></button>');
+      a.push('<button class="hb-btn danger" data-top="lightsoff" title="Stop everything and turn all lights off">' + icon('power', 16) + '<span>Lights off</span></button>');
       a.push('<button class="hb-btn' + (S.selMode ? ' primary' : '') + '" data-top="select">' + icon('check', 16) + '<span>Select</span></button>');
     }
     a.push('<button class="hb-btn" data-top="events">' + icon('list', 16) + '<span>Activity</span></button>');
@@ -586,6 +587,17 @@
     if (a === 'plug-on') return runBulk(list, 'on', { outlet: '*' });
     if (a === 'plug-off') { if (!(await H.confirm('Turn OFF ' + list.length + ' plug(s)?', 'All off', true))) return; return runBulk(list, 'off', { outlet: '*' }); }
   }
+  async function lightsOff() {
+    const all = S.cfg.devices.filter((d) => !d.hidden);
+    const targets = all.filter((d) => d.kind === 'fpp' || (d.kind === 'controller' && d.type === 'wled'));
+    const skipped = all.filter((d) => d.kind === 'controller' && d.type !== 'wled').length;
+    if (!targets.length) return H.toast('No Falcon Players or WLED controllers to switch off', 'err');
+    const msg = 'Turn the lights off on ' + targets.length + ' device' + (targets.length === 1 ? '' : 's') + '? Playlists are stopped, test patterns are cancelled and outputs are blanked.' +
+      (skipped ? ' ' + skipped + ' other controller' + (skipped === 1 ? ' has' : 's have') + ' no off command the Hub can send – they go dark when their FPP stops sending data.' : '') + ' Smart plugs are not touched.';
+    if (!(await H.confirm(msg, 'Lights off', true))) return;
+    await runBulk(targets, 'lights_off', {});
+  }
+
   async function runBulk(list, cmd, args) {
     const res = await Promise.allSettled(list.map((d) => act(d, cmd, args, { quiet: true })));
     const bad = res.filter((r) => r.status === 'rejected').length;
@@ -647,6 +659,7 @@
     if (a === 'add') return addDevice();
     if (a === 'select') { S.selMode = !S.selMode; if (!S.selMode) S.sel.clear(); return renderAll(); }
     if (a === 'events') return showEvents();
+    if (a === 'lightsoff') return lightsOff();
     if (a === 'watchdog') return toggleWatchdog();
     if (a === 'full') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
   }

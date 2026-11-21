@@ -23,7 +23,7 @@ body.hb-idle.hb-page{cursor:none}
 /* top bar */
 .hb-top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
 .hb-brand{display:flex;align-items:center;gap:12px;min-width:220px}
-.hb-logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:#06101f;background:linear-gradient(135deg,var(--accent),#a78bfa);box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 40%,transparent)}
+.hb-logo{width:46px;height:46px;display:grid;place-items:center;filter:drop-shadow(0 6px 14px color-mix(in srgb,var(--accent) 35%,transparent))}.hb-logo svg{border-radius:13px}
 .hb-brand h2{font-size:21px;font-weight:700;line-height:1.1}
 .hb-sub{color:var(--mut);font-size:12.5px;margin-top:2px}.hb-sub.bad{color:var(--bad)}
 .hb-search{flex:1 1 240px;max-width:420px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:0 12px;color:var(--mut)}

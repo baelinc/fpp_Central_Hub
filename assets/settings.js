@@ -14,7 +14,7 @@
   const abs = (rel) => new URL(rel, location.href).href;
 
   function shell() {
-    root.innerHTML = '<div class="hb-top"><div class="hb-brand"><span class="hb-logo">' + icon('gear', 22) + '</span><div><h2>Central Hub Settings</h2><div class="hb-sub">Version ' + esc(B.version) + '</div></div></div><div class="hb-actions"><a class="hb-btn primary" href="' + esc(B.dashUrl) + '">' + icon('home', 16) + '<span>Back to dashboard</span></a></div></div>' +
+    root.innerHTML = '<div class="hb-top"><div class="hb-brand"><span class="hb-logo">' + H.logo(46) + '</span><div><h2>Central Hub Settings</h2><div class="hb-sub">Version ' + esc(B.version) + '</div></div></div><div class="hb-actions"><a class="hb-btn primary" href="' + esc(B.dashUrl) + '">' + icon('home', 16) + '<span>Back to dashboard</span></a></div></div>' +
       '<div class="hb-set"><nav class="hb-snav">' + NAV.map((n) => '<button data-p="' + n[0] + '">' + icon(n[2], 17) + n[1] + '</button>').join('') + '</nav><div id="hb-panes"></div></div>';
     root.querySelectorAll('.hb-snav button').forEach((b) => b.addEventListener('click', () => show(b.dataset.p)));
   }
@@ -59,8 +59,7 @@
       '<label>Link<div class="hb-urlbox"><input id="k-url" readonly value="' + esc(kurl) + '"><button class="hb-btn" data-copy="k-url">Copy</button><a class="hb-btn primary" id="k-open" href="' + esc(kurl) + '" target="_blank" rel="noopener">' + icon('ext', 16) + ' Open</a></div></label>' +
       '<div class="hb-two"><label>Show only<select id="k-kind" class="hb-sel"><option value="">Everything</option><option value="fpp">Falcon Players</option><option value="controller">Controllers</option><option value="plug">Smart plugs</option></select></label><label>Columns<select id="k-cols" class="hb-sel"><option value="">Automatic</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label></div>' +
       '<label class="hb-chk"><input type="checkbox" id="k-ro"> Add <span class="hb-mono">&readonly=1</span> to this link (view-only)</label>' +
-      '<hr style="border:0;border-top:1px solid var(--bd);width:100%"><label>Kiosk title<input id="o-ktitle" value="' + esc(o.kioskTitle) + '"></label>' +
-      '<label class="hb-chk"><input type="checkbox" id="o-kro"' + (o.kioskReadOnly ? ' checked' : '') + '> Always view-only in the kiosk (hides all controls and blocks control requests from the kiosk page)</label>' +
+      '<hr style="border:0;border-top:1px solid var(--bd);width:100%">' + '<label class="hb-chk"><input type="checkbox" id="o-kro"' + (o.kioskReadOnly ? ' checked' : '') + '> Always view-only in the kiosk (hides all controls and blocks control requests from the kiosk page)</label>' +
       '<p class="hb-hint">If an FPP UI password is set, the kiosk page asks for it too – it is protected like the rest of FPP. Tip: on iOS/Android use “Add to Home Screen” for a full-screen app-like launcher.</p></div>' + saveBar('kio')));
 
     panes.push(pane('det', '<h3>Detection rules</h3><span class="hb-hint">How lighting controllers are recognised: the Hub loads each device\'s web page on port 80 and looks for these words (case-insensitive) in the headers and HTML. First matching rule wins, so keep specific rules above generic ones. If a controller is not found, scan once, look under “Other web devices answered”, and add a keyword here.</span>' +
@@ -109,7 +108,7 @@
     const options = {
       theme: $('#o-theme').value, accent: $('#o-accent').value, refreshSeconds: +$('#o-refresh').value, cycleSeconds: +$('#o-cycle').value,
       connectTimeoutMs: +$('#o-ct').value, httpTimeoutMs: +$('#o-ht').value, showOffline: $('#o-off').checked, compact: $('#o-compact').checked,
-      autoScanOnLoad: $('#o-auto').checked, watchdogEnabled: $('#o-wd').checked, sshDefaultUser: $('#o-su').value, sshDefaultPass: $('#o-sp').value, kioskTitle: $('#o-ktitle').value, kioskReadOnly: $('#o-kro').checked,
+      autoScanOnLoad: $('#o-auto').checked, watchdogEnabled: $('#o-wd').checked, sshDefaultUser: $('#o-su').value, sshDefaultPass: $('#o-sp').value, kioskReadOnly: $('#o-kro').checked,
     };
     const sig = parseSig();
     if (sig instanceof Error) throw new Error('Detection rules: ' + sig.message);

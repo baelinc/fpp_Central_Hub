@@ -32,7 +32,8 @@ function hub_render($which, array $o = array())
         echo '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">';
         echo '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">';
         echo '<meta name="theme-color" content="#080d1a">';
-        echo '<title>' . htmlspecialchars($kiosk ? $cfg['options']['kioskTitle'] : 'FPP Central Hub') . '</title>';
+        echo '<title>' . 'Central Hub' . '</title>';
+        echo '<link rel="icon" type="image/png" href="plugin.php?plugin=fpp_Central_Hub&file=icon.png&nopage=1"><link rel="apple-touch-icon" href="plugin.php?plugin=fpp_Central_Hub&file=icon.png&nopage=1">';
         echo '<link rel="stylesheet" href="' . hub_asset('hub.css') . '">';
         echo '</head><body class="hb-page" data-theme="' . $theme . '">';
     } else {

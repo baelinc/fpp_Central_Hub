@@ -413,9 +413,6 @@ try {
                 if (isset($opts['sshDefaultPass']) && $opts['sshDefaultPass'] !== '') {
                     $o['sshDefaultPass'] = (string) $opts['sshDefaultPass'];
                 }
-                if (isset($opts['kioskTitle'])) {
-                    $o['kioskTitle'] = hub_substr(trim($opts['kioskTitle']), 0, 60);
-                }
                 if ($sigs !== false) {
                     $c['signatures'] = is_array($sigs) && $sigs ? $sigs : null;
                 }

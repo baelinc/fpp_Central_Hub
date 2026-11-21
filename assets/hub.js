@@ -20,7 +20,7 @@
     root.innerHTML =
       '<div class="hb-app">' +
       '<header class="hb-top">' +
-      '<div class="hb-brand"><span class="hb-logo">' + icon('zap', 22) + '</span><div><h2 id="hb-title">Central Hub</h2><div class="hb-sub" id="hb-summary">Loading…</div></div></div>' +
+      '<div class="hb-brand"><span class="hb-logo">' + H.logo(46) + '</span><div><h2 id="hb-title">Central Hub</h2><div class="hb-sub" id="hb-summary">Loading…</div></div></div>' +
       '<label class="hb-search">' + icon('search', 16) + '<input id="hb-q" type="search" placeholder="Search devices, IPs, groups…" autocomplete="off"></label>' +
       '<div class="hb-actions" id="hb-actions"></div>' +
       '</header>' +
@@ -354,7 +354,7 @@
     root.classList.toggle('compact', !!opt('compact'));
     H.applyTheme(root, S.cfg.options);
     const t = document.getElementById('hb-title');
-    if (t) t.textContent = B.kiosk ? S.cfg.options.kioskTitle || 'Central Hub' : 'Central Hub';
+    if (t) t.textContent = 'Central Hub';
     if (B.cols) root.style.setProperty('--hb-cols', B.cols);
   }
 

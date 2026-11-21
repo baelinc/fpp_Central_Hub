@@ -8,7 +8,7 @@
  */
 class HubStore
 {
-    const VERSION = '1.1.3';
+    const VERSION = '1.2.0';
 
     public static function dir()
     {
@@ -45,7 +45,6 @@ class HubStore
                 'accent' => '#38bdf8',
                 'connectTimeoutMs' => 700,
                 'httpTimeoutMs' => 2500,
-                'kioskTitle' => 'Central Hub',
                 'kioskReadOnly' => false,
                 'showOffline' => true,
                 'compact' => false,
@@ -77,9 +76,7 @@ class HubStore
         $cfg = array_replace($def, $cfg);
         $cfg['options'] = array_replace($def['options'], is_array($cfg['options']) ? $cfg['options'] : array());
         $cfg['ranges'] = array_replace($def['ranges'], is_array($cfg['ranges']) ? $cfg['ranges'] : array());
-        if (isset($cfg['options']['kioskTitle']) && $cfg['options']['kioskTitle'] === 'Light Show Hub') {
-            $cfg['options']['kioskTitle'] = 'Central Hub'; // renamed default
-        }
+        unset($cfg['options']['kioskTitle']); // setting removed
         foreach (array('devices', 'ignored', 'scenes') as $k) {
             if (!is_array($cfg[$k])) {
                 $cfg[$k] = array();

@@ -1,3 +1,5 @@
+<p align="center"><img src="icon.png" width="96" alt="FPP Central Hub logo"></p>
+
 # FPP Central Hub
 
 A Falcon Player (FPP) plugin that gives you one dashboard for your whole show network.

@@ -181,6 +181,9 @@
     catch (e) { Hub.toast(e.message, 'err'); }
   };
 
+  let logoN = 0;
+  Hub.logo = (size) => { const u = ++logoN; return '<svg class="hb-logo-svg" width="'+(size||44)+'" height="'+(size||44)+'" viewBox="0 0 128 128" aria-label="Central Hub"><defs><linearGradient id="hbg'+u+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#a78bfa"/></linearGradient><radialGradient id="hbb'+u+'" cx="30%" cy="20%" r="90%"><stop offset="0" stop-color="#16244a"/><stop offset="1" stop-color="#080d1a"/></radialGradient></defs><rect width="128" height="128" rx="28" fill="url(#hbb'+u+')"/><circle cx="64" cy="64" r="40" fill="none" stroke="url(#hbg'+u+')" stroke-width="2.5" opacity=".35"/><g stroke="url(#hbg'+u+')" stroke-width="5" stroke-linecap="round"><line x1="64" y1="64" x2="64" y2="24"/><line x1="64" y1="64" x2="98.6" y2="44"/><line x1="64" y1="64" x2="98.6" y2="84"/><line x1="64" y1="64" x2="64" y2="104"/><line x1="64" y1="64" x2="29.4" y2="84"/><line x1="64" y1="64" x2="29.4" y2="44"/></g><g fill="url(#hbg'+u+')"><circle cx="64" cy="24" r="8"/><circle cx="98.6" cy="44" r="8"/><circle cx="98.6" cy="84" r="8"/><circle cx="64" cy="104" r="8"/><circle cx="29.4" cy="84" r="8"/><circle cx="29.4" cy="44" r="8"/><circle cx="64" cy="64" r="19"/></g><path d="M68.5 50 L56 66.5 H63.5 L60.5 79 L73 62 H65.5 Z" fill="#0b1226"/></svg>'; };
+
   Hub.openUrl = function (d) {
     if (d.local) return location.protocol + '//' + location.host + '/';
     const port = d.port && Number(d.port) !== 80 ? ':' + d.port : '';

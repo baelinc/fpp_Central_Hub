@@ -1,0 +1,17 @@
+{
+    "repoName": "fpp_Central_Hub",
+    "name": "FPP Central Hub",
+    "author": "baelinc",
+    "description": "One-stop dashboard for every FPP instance, lighting controller (Kulp, Falcon/Baldrick, Experience Lights, Pixel2Things, Hanson, ESPixelStick, WLED) and local smart plug (Kasa, Tasmota, Shelly) on your network.",
+    "homeURL": "https://github.com/baelinc/fpp_Central_Hub",
+    "srcURL": "https://github.com/baelinc/fpp_Central_Hub.git",
+    "bugURL": "https://github.com/baelinc/fpp_Central_Hub/issues",
+    "versions": [
+        {
+            "minFPPVersion": "6.0",
+            "maxFPPVersion": "0",
+            "branch": "main",
+            "sha": ""
+        }
+    ]
+}

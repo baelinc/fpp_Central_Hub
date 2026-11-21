@@ -57,6 +57,7 @@
 
     const kurl = abs(B.kioskUrl);
     panes.push(pane('kio', '<h3>Kiosk & phone link</h3><span class="hb-hint">A standalone page with no FPP menus – ideal for a phone home-screen shortcut, a wall tablet or a kiosk browser. It is served by this FPP, so the viewing device only needs to reach this FPP.</span><div class="hb-form">' +
+      '<div class="hb-qrrow"><div class="hb-qr" id="k-qr" title="Scan with your phone camera"></div><div class="hb-hint"><b>Scan to open on your phone.</b><br>Point the camera at the code. The code always matches the link and options below, and is made right here in your browser.<br><button class="hb-btn sm" id="k-qrsave" type="button" style="margin-top:8px">' + icon('download', 14) + ' Save QR image</button></div></div>' +
       '<label>Link<div class="hb-urlbox"><input id="k-url" readonly value="' + esc(kurl) + '"><button class="hb-btn" data-copy="k-url">Copy</button><a class="hb-btn primary" id="k-open" href="' + esc(kurl) + '" target="_blank" rel="noopener">' + icon('ext', 16) + ' Open</a></div></label>' +
       '<div class="hb-two"><label>Show only<select id="k-kind" class="hb-sel"><option value="">Everything</option><option value="fpp">Falcon Players</option><option value="controller">Controllers</option><option value="sensor">Counters &amp; sensors</option><option value="plug">Smart plugs</option></select></label><label>Columns<select id="k-cols" class="hb-sel"><option value="">Automatic</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label></div>' +
       '<label class="hb-chk"><input type="checkbox" id="k-ro"> Add <span class="hb-mono">&readonly=1</span> to this link (view-only)</label>' +
@@ -93,6 +94,15 @@
     if ($('#k-ro').checked) p.push('readonly=1');
     const u = abs(B.kioskUrl) + (p.length ? '&' + p.join('&') : '');
     $('#k-url').value = u; $('#k-open').href = u;
+    drawQr(u);
+  }
+  function qrSvg(text) {
+    const q = window.qrcode(0, 'M'); q.addData(text); q.make();
+    return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+  }
+  function drawQr(u) {
+    const box = $('#k-qr'); if (!box) return;
+    try { box.innerHTML = qrSvg(u); } catch (e) { box.innerHTML = '<span class="hb-hint">Link too long for a QR code</span>'; }
   }
   async function validateRange(k) {
     const ta = $('[data-r="' + k + '"]'), info = $('[data-ri="' + k + '"]');
@@ -160,6 +170,16 @@
     root.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', async () => { b.disabled = true; try { await H.api('monitor_ctl', { op: b.dataset.mon }); } catch (e) { H.toast(e.message, 'err'); } b.disabled = false; monRefresh(); }));
     monRefresh();
     kioskUrl();
+    $('#k-qrsave').addEventListener('click', () => {
+      try {
+        const q = window.qrcode(0, 'M'); q.addData($('#k-url').value); q.make();
+        const n = q.getModuleCount(), cell = 10, pad = 4 * cell, size = n * cell + pad * 2;
+        const cv = document.createElement('canvas'); cv.width = cv.height = size;
+        const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, size, size); cx.fillStyle = '#000';
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) cx.fillRect(pad + c * cell, pad + r * cell, cell, cell);
+        const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'central-hub-qr.png'; document.body.appendChild(a); a.click(); a.remove();
+      } catch (e) { H.toast('Could not make the image: ' + e.message, 'err'); }
+    });
     let latest = null;
     $('#u-check').addEventListener('click', async () => {
       $('#u-msg').textContent = 'Checking…';

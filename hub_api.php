@@ -521,7 +521,13 @@ try {
             });
             HubMonitor::stop();
             $ok = stripos($out, 'fatal') === false && stripos($out, 'error') === false;
-            hub_out(array('ok' => $ok, 'output' => $out, 'error' => $ok ? null : 'Update failed: ' . trim($out)));
+            $err = $ok ? null : 'Update failed: ' . trim($out);
+            if (!$ok && preg_match('/insufficient permission|permission denied|unable to (create|write)|cannot (open|create)/i', $out)) {
+                $user = function_exists('posix_getpwuid') ? (posix_getpwuid(posix_geteuid())['name'] ?? 'fpp') : 'fpp';
+                $err = 'The plugin folder is owned by a different user than the one FPP\'s web server runs as (' . $user . '), so it cannot be updated from here. '
+                    . 'One-time fix: open an SSH session to this FPP and run:  sudo chown -R ' . $user . ':' . $user . ' ' . $dir . '  - then update again. (Restarting FPPD also repairs this automatically from v1.3.1.)';
+            }
+            hub_out(array('ok' => $ok, 'output' => $out, 'error' => $err));
 
         case 'monitor_status':
             $m = array('ok' => true, 'running' => HubMonitor::running(), 'heartbeat' => HubMonitor::heartbeat(), 'ssh' => HubSsh::available());

@@ -42,6 +42,9 @@ function hub_render($which, array $o = array())
     echo '<div id="hub-root" class="hub" data-theme="' . $theme . '"><noscript>FPP Central Hub needs JavaScript.</noscript></div>';
     echo '<script>window.HUB_BOOT=' . json_encode($boot, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) . ';</script>';
     echo '<script src="' . hub_asset('common.js') . '"></script>';
+    if ($which === 'settings') {
+        echo '<script src="' . hub_asset('qrcode.js') . '"></script>';
+    }
     echo '<script src="' . hub_asset($which === 'settings' ? 'settings.js' : 'hub.js') . '"></script>';
     if ($standalone) {
         echo '</body></html>';

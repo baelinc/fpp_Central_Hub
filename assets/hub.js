@@ -11,7 +11,7 @@
   ];
   const NOPLAY = ['remote', 'bridge']; // modes with no playlists / scheduler of their own
   const FPP_PAGES = [['Status', 'index.php', 'pulse'], ['Playlists', 'playlists.php', 'list'], ['Schedule', 'scheduler.php', 'sun'], ['File manager', 'filemanager.php', 'download'], ['Channel outputs', 'channeloutputs.php', 'zap'], ['Test patterns', 'testing.php', 'zap'], ['Settings', 'settings.php', 'gear']];
-  const S = { cfg: null, types: {}, status: {}, recv: {}, tab: B.kind || 'all', group: '', q: '', sel: new Set(), selMode: false, playlists: {}, drag: new Set(), polling: false, ro: false, timer: null, sigCfg: '', acted: {}, watch: {}, monitor: null };
+  const S = { ext: {}, cfg: null, types: {}, status: {}, recv: {}, tab: B.kind || 'all', group: '', q: '', sel: new Set(), selMode: false, playlists: {}, drag: new Set(), polling: false, ro: false, timer: null, sigCfg: '', acted: {}, watch: {}, monitor: null };
 
   const dev = (id) => S.cfg.devices.find((d) => d.id === id);
   const typeLabel = (d) => ((S.types[d.kind] || {})[d.type] || {}).label || d.type;
@@ -110,7 +110,7 @@
         (d.hasAudio ? '<div class="hb-row hb-vol" data-ctl>' + icon('volume', 16) + '<input type="range" min="0" max="100" data-b="vol"><span data-b="volv" class="hb-mono">–</span></div>' : '') +
         '<div class="hb-chips" data-b="chips"></div>' +
         '<div class="hb-link" data-b="link"></div>';
-      foot = openBtn(d, 'Open FPP') + '<button class="hb-btn" data-act="pages">' + icon('list', 16) + '<span>Pages</span></button><button class="hb-btn" data-act="test" data-ctl title="Run a channel test pattern">' + icon('zap', 16) + '<span>Test</span></button><button class="hb-btn" data-act="power" data-ctl>' + icon('power', 16) + '<span>Power</span></button>';
+      foot = openBtn(d, 'Open FPP') + '<button class="hb-btn" data-act="pages">' + icon('list', 16) + '<span>Pages</span></button><button class="hb-btn" data-act="bb" data-ctl hidden title="Your Big Buttons">' + icon('layers', 16) + '<span>Buttons</span></button><button class="hb-btn" data-act="aa" data-ctl hidden title="Play an announcement over the show audio">' + icon('volume', 16) + '<span>Announce</span></button><button class="hb-btn" data-act="test" data-ctl title="Run a channel test pattern">' + icon('zap', 16) + '<span>Test</span></button><button class="hb-btn" data-act="power" data-ctl>' + icon('power', 16) + '<span>Power</span></button>';
     } else if (d.kind === 'controller') {
       body =
         '<div class="hb-kv"><div><span>Status</span><b data-b="ctl">–</b></div><div><span>Latency</span><b data-b="lat" class="hb-mono">–</b></div><div><span>Page title</span><b data-b="ttl">–</b></div></div>' +
@@ -241,6 +241,10 @@
       const noPlay = online && NOPLAY.indexOf(det.mode) >= 0;
       card.classList.toggle('playing', playing);
       card.classList.toggle('remote', noPlay);
+      const ex = S.ext[d.id] || {};
+      const bbb = card.querySelector('[data-act="bb"]'), aab = card.querySelector('[data-act="aa"]');
+      if (bbb) bbb.hidden = !(online && ex.bb);
+      if (aab) aab.hidden = !(online && ex.aa);
       const mt = card.querySelector('[data-b="mode"]');
       if (mt) { mt.hidden = !(online && det.mode); mt.textContent = det.mode ? det.mode.toUpperCase() : ''; mt.classList.toggle('remote', noPlay); }
       setB(card, 'npT', !online ? '—' : det.fppd === false ? 'FPPD is not running' : playing ? (det.playlist || det.sequence || 'Playing') : noPlay ? (det.mode === 'remote' ? 'Waiting for the master' : 'Bridge mode') : 'Idle');
@@ -392,9 +396,25 @@
       Object.keys(r.status).forEach((id) => { if ((S.acted[id] || 0) > t0) return; S.status[id] = r.status[id]; S.recv[id] = now; });
       S.connErr = false;
       patchAll();
+      probeExtras();
       if (!opt('showOffline')) renderAll();
     } catch (e) { S.connErr = true; summary(); } finally { S.polling = false; }
   }
+  /* other FPP plugins the cards can drive: Big Buttons and Announcement Assistant (re-checked every 10 minutes) */
+  async function probeExtras(force) {
+    if (S.ro) return;
+    const now = Date.now();
+    const list = S.cfg.devices.filter((d) => d.kind === 'fpp' && S.status[d.id] && S.status[d.id].online && (force || !S.ext[d.id] || now - S.ext[d.id].t > 600000) && !(S.ext[d.id] && S.ext[d.id].busy));
+    await Promise.all(list.map(async (d) => {
+      S.ext[d.id] = Object.assign({ t: now }, S.ext[d.id] || {}, { busy: true });
+      try {
+        const r = await H.api('act', { id: d.id, cmd: 'extras', args: {} });
+        S.ext[d.id] = { t: Date.now(), bb: (r.data && r.data.bb) || null, aa: (r.data && r.data.aa) || null };
+      } catch (e) { S.ext[d.id] = { t: Date.now() - 540000 }; /* retry in ~1 minute */ }
+      const c = document.querySelector('.hb-card[data-id="' + d.id + '"]'); if (c) patchCard(c);
+    }));
+  }
+
   async function refreshOne(id, delay) {
     if (delay) await H.sleep(delay);
     try {
@@ -501,6 +521,8 @@
       if (a === 'car+' || a === 'car-') return act(d, 'adjust', { delta: a === 'car+' ? 1 : -1 });
       if (a === 'login') return editDevice(d);
       if (a === 'test') return testDialog(d);
+      if (a === 'bb') return bbDialog(d);
+      if (a === 'aa') return aaDialog(d);
       if (a === 'pages') return Hub.menu(t, FPP_PAGES.map((p) => ({ label: p[0], icon: p[2], href: H.openUrl(d) + p[1] })));
       if (a === 'power') return Hub.menu(t, [
         { label: 'Restart FPPD', icon: 'refresh', onClick: async () => { if (await H.confirm('Restart the FPP daemon on ' + d.name + '?', 'Restart')) act(d, 'restart_fppd'); } },
@@ -516,6 +538,51 @@
       if (a === 'cycle') return powerCycle(d);
     } catch (err) { /* toast already shown */ }
   });
+
+  async function bbDialog(d) {
+    try { const r = await H.api('act', { id: d.id, cmd: 'extras', args: {} }); S.ext[d.id] = { t: Date.now(), bb: (r.data && r.data.bb) || null, aa: (r.data && r.data.aa) || null }; } catch (e) { /* use cached */ }
+    const tabs = (S.ext[d.id] && S.ext[d.id].bb) || [];
+    if (!tabs.length) return H.toast('No Big Buttons are set up on ' + d.name, 'err');
+    const html = '<div class="hb-form">' + (tabs.length > 1 ? '<div class="hb-seg" id="bb-tabs">' + tabs.map((t, i) => '<button type="button" class="' + (i === 0 ? 'on' : '') + '" data-t="' + i + '">' + esc(t.title) + '</button>').join('') + '</div>' : '') + '<div class="hb-bbgrid" id="bb-grid"></div></div>';
+    H.modal({
+      title: 'Big Buttons – ' + d.name, html, wide: true,
+      onOpen(m) {
+        const grid = m.body.querySelector('#bb-grid');
+        const draw = (ti) => {
+          grid.innerHTML = tabs[ti].buttons.map((b) => '<button type="button" class="hb-bbbtn" data-i="' + b.index + '"' + (b.color ? ' style="--bbc:' + esc(b.color) + '"' : '') + (b.adjustable ? ' disabled title="Adjustable buttons can only be used on the FPP Big Buttons page"' : '') + '>' + esc(b.title) + '</button>').join('');
+          grid.querySelectorAll('.hb-bbbtn').forEach((el) => el.addEventListener('click', async () => {
+            el.classList.add('busy');
+            try {
+              const r = await H.api('act', { id: d.id, cmd: 'bb_press', args: { tab: tabs[ti].index, index: +el.dataset.i } });
+              H.toast(r.msg || 'Done', 'ok');
+              if (r.data && r.data.url) window.open(r.data.url, '_blank', 'noopener');
+            } catch (e) { H.toast(e.message, 'err'); } finally { el.classList.remove('busy'); }
+          }));
+        };
+        m.body.querySelectorAll('#bb-tabs button').forEach((b) => b.addEventListener('click', () => { m.body.querySelectorAll('#bb-tabs button').forEach((x) => x.classList.toggle('on', x === b)); draw(+b.dataset.t); }));
+        draw(0);
+      },
+      buttons: [{ label: 'Close', cls: 'primary' }],
+    });
+  }
+
+  async function aaDialog(d) {
+    try { const r = await H.api('act', { id: d.id, cmd: 'extras', args: {} }); S.ext[d.id] = { t: Date.now(), bb: (r.data && r.data.bb) || null, aa: (r.data && r.data.aa) || null }; } catch (e) { /* use cached */ }
+    const slots = (S.ext[d.id] && S.ext[d.id].aa) || [];
+    if (!slots.length) return H.toast('Announcement Assistant has no announcements set up on ' + d.name, 'err');
+    const html = '<div class="hb-form"><p class="hb-hint">Plays the message over the show audio on <b>' + esc(d.name) + '</b>; the show music is lowered automatically while it plays.</p><div class="hb-bbgrid">' +
+      slots.map((s) => '<button type="button" class="hb-bbbtn" data-slot="' + s.slot + '">' + icon('volume', 18) + ' ' + esc(s.label) + '</button>').join('') + '</div></div>';
+    H.modal({
+      title: 'Announcements – ' + d.name, html, wide: true,
+      onOpen(m) {
+        m.body.querySelectorAll('.hb-bbbtn').forEach((el) => el.addEventListener('click', async () => {
+          el.classList.add('busy');
+          try { const r = await H.api('act', { id: d.id, cmd: 'aa_play', args: { slot: +el.dataset.slot } }); H.toast(r.msg || 'Playing', 'ok'); } catch (e) { H.toast(e.message, 'err'); } finally { el.classList.remove('busy'); }
+        }));
+      },
+      buttons: [{ label: 'Stop announcement', cls: 'danger', onClick: async () => { try { const r = await H.api('act', { id: d.id, cmd: 'aa_stop', args: {} }); H.toast(r.msg || 'Stopped', 'ok'); } catch (e) { H.toast(e.message, 'err'); } return false; } }, { label: 'Close', cls: 'primary' }],
+    });
+  }
 
   async function testDialog(d) {
     let cur = null;

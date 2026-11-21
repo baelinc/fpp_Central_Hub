@@ -890,8 +890,123 @@ class HubDrivers
         return array(false, 'This device does not support that action', null);
     }
 
+    // ------------------------------------------------ Big Buttons / Announcement Assistant (other plugins on the FPP)
+
+    private static function hexColor($c)
+    {
+        $c = trim((string) $c);
+        if (preg_match('/^[0-9a-f]{6}$/i', $c)) {
+            $c = '#' . $c;
+        }
+        return preg_match('/^#[0-9a-f]{3,8}$/i', $c) ? $c : '';
+    }
+
+    /** The Big Buttons plugin keeps its tabs/buttons in FPP's config file plugin.fpp-BigButtons.json. Returns the raw tab list or null. */
+    private static function bbRaw($res)
+    {
+        if (!$res || (int) $res['code'] !== 200) {
+            return null;
+        }
+        $j = json_decode($res['body'], true);
+        if (is_string($j)) {
+            $j = json_decode($j, true); // the page stores it as a JSON string
+        }
+        if (!is_array($j)) {
+            return null;
+        }
+        $tabs = array();
+        foreach ($j as $k => $tab) {
+            if (is_array($tab) && isset($tab['buttons']) && is_array($tab['buttons'])) {
+                $tabs[] = $tab;
+            }
+        }
+        return $tabs;
+    }
+
+    private static function bbTabs($res)
+    {
+        $raw = self::bbRaw($res);
+        if (!$raw) {
+            return null;
+        }
+        $out = array();
+        foreach ($raw as $ti => $tab) {
+            $btns = array();
+            foreach ($tab['buttons'] as $bi => $b) {
+                if (!is_array($b) || empty($b['command'])) {
+                    continue;
+                }
+                $btns[] = array('index' => $bi, 'title' => isset($b['description']) ? substr(strip_tags((string) $b['description']), 0, 80) : 'Button',
+                    'color' => isset($b['color']) ? self::hexColor($b['color']) : '', 'adjustable' => !empty($b['adjustable']));
+            }
+            if ($btns) {
+                $out[] = array('index' => $ti, 'title' => isset($tab['title']) ? substr(strip_tags((string) $tab['title']), 0, 60) : 'Buttons', 'buttons' => $btns);
+            }
+        }
+        return $out ? $out : null;
+    }
+
+    /** Announcement Assistant lists the slots that have an audio file assigned as {"0":"Label",...}. Returns [[slot,label],...] or null when not installed. */
+    private static function aaSlots($res)
+    {
+        if (!$res || (int) $res['code'] !== 200) {
+            return null;
+        }
+        $j = json_decode($res['body'], true);
+        if (!is_array($j) || !$j) {
+            return null;
+        }
+        $out = array();
+        foreach ($j as $k => $label) {
+            if (is_numeric($k) && (int) $k >= 0 && (int) $k <= 5 && is_string($label)) {
+                $out[] = array('slot' => (int) $k, 'label' => substr(strip_tags($label), 0, 60));
+            }
+        }
+        return $out ? $out : null;
+    }
+
     private static function actFpp(array $cfg, array $d, $cmd, array $args)
     {
+        if ($cmd === 'extras') {
+            $o = self::opts($cfg);
+            $b = self::base($d);
+            $rs = HubNet::multi(array(
+                'bb' => array('url' => $b . '/api/configfile/plugin.fpp-BigButtons.json', 'max' => 262144) + $o,
+                'aa' => array('url' => $b . '/plugin.php?plugin=fpp-AnnouncementAssistant&nopage=1&page=www/slots.php', 'max' => 16384) + $o,
+            ), 2);
+            return array(true, '', array('bb' => self::bbTabs($rs['bb']), 'aa' => self::aaSlots($rs['aa'])));
+        }
+        if ($cmd === 'bb_press') {
+            // only buttons that exist in the plugin's own config can be pressed; the Hub never sends a command the browser made up
+            $r = self::fppGet($cfg, $d, '/api/configfile/plugin.fpp-BigButtons.json');
+            $raw = self::bbRaw($r);
+            $ti = isset($args['tab']) ? (int) $args['tab'] : -1;
+            $bi = isset($args['index']) ? (int) $args['index'] : -1;
+            if (!$raw || !isset($raw[$ti]['buttons'][$bi]) || empty($raw[$ti]['buttons'][$bi]['command'])) {
+                return array(false, 'That button no longer exists - reopen the list', null);
+            }
+            $b = $raw[$ti]['buttons'][$bi];
+            $label = isset($b['description']) ? strip_tags((string) $b['description']) : 'Button';
+            if ($b['command'] === 'Browser URL') {
+                $u = isset($b['args'][0]) ? (string) $b['args'][0] : '';
+                return preg_match('#^https?://#i', $u) ? array(true, 'Opening ' . $label, array('url' => $u)) : array(false, 'Not a web address', null);
+            }
+            $body = array('command' => (string) $b['command'], 'args' => isset($b['args']) && is_array($b['args']) ? array_values($b['args']) : array());
+            if (!empty($b['multisyncCommand'])) {
+                $body['multisyncCommand'] = true;
+                $body['multisyncHosts'] = isset($b['multisyncHosts']) ? $b['multisyncHosts'] : '';
+            }
+            $r2 = self::fppGet($cfg, $d, '/api/command', 'POST', json_encode($body));
+            $ok = $r2['code'] >= 200 && $r2['code'] < 300;
+            return array($ok, $ok ? $label . ' pressed' : 'FPP did not accept the command', null);
+        }
+        if ($cmd === 'aa_play' || $cmd === 'aa_stop') {
+            $q = $cmd === 'aa_stop' ? 'action=stop' : 'action=play&slot=' . max(0, min(5, (int) (isset($args['slot']) ? $args['slot'] : 0)));
+            $r = self::fppGet($cfg, $d, '/plugin.php?plugin=fpp-AnnouncementAssistant&nopage=1&page=www/trigger.php&' . $q);
+            $j = json_decode($r['body'], true);
+            $ok = is_array($j) && isset($j['status']) && $j['status'] === 'OK';
+            return array($ok, $ok ? (isset($j['message']) ? (string) $j['message'] : 'Done') : (is_array($j) && isset($j['message']) ? (string) $j['message'] : 'Announcement Assistant did not respond'), null);
+        }
         switch ($cmd) {
             case 'playlists':
                 $r = self::fppGet($cfg, $d, '/api/playlists');

@@ -71,6 +71,8 @@ def make(ip):
                 if c.get('cmd') == 'adjust': LIDAR['cars'] = max(0, LIDAR['cars'] + c.get('delta', 1))
                 if c.get('cmd') == 'reset_today': LIDAR['cars'] = 0
                 return self.send('{"ok":true,"id":"abc"}')
+            if self.path == '/api/command':
+                STATE['cmds'] = STATE.get('cmds', []) + [json.loads(body)]; return self.send('{"status":"OK"}')
             if self.path == '/api/testmode':
                 TEST.update(json.loads(body)); return self.send('{"status":"OK"}')
             if self.path == '/api/system/volume': STATE['vol'] = json.loads(body)['volume']; return self.send('{"status":"OK"}')
@@ -94,6 +96,11 @@ def make(ip):
                 if p == '/api/system/info': return self.send(json.dumps({'HostName': 'MockFPP' if ip.endswith('.11') else 'RemoteFPP', 'Platform': 'Raspberry Pi', 'Variant': 'Pi 4', 'Version': '9.0', 'Branch': 'master', 'Mode': 'player', 'uuid': 'mock-uuid-' + ip[-2:]}))
                 if p == '/api/fppd/status': return self.send(json.dumps({'fppd': 'running', 'mode_name': 'player' if ip.endswith('.11') else 'remote', 'status_name': 'playing' if STATE['playing'] else 'idle', 'current_playlist': {'playlist': 'Main Show' if STATE['playing'] else ''}, 'current_sequence': 'jingle.fseq', 'seconds_played': 42, 'seconds_remaining': 118, 'volume': STATE['vol'], 'version': '9.0', 'branch': 'master', 'uptime': '2 days', 'sensors': [{'label': 'CPU', 'valueType': 'Temperature', 'value': 51.2}], 'warnings': [], 'scheduler': {'enabled': 1, 'nextPlaylist': {'playlistName': 'Main Show', 'scheduledStartTimeStr': 'Today @ 17:00'}}}))
                 if p.startswith('/api/command/'): STATE['cmds'] = STATE.get('cmds', []) + [p]; return self.send('{"status":"OK"}')
+                if ip.endswith('.11') and p.startswith('/api/configfile/plugin.fpp-BigButtons.json'):
+                    return self.send(json.dumps(json.dumps([{'title': 'Show', 'description': '', 'color': 'f5f5f5', 'buttons': [{'description': 'Start Main Show', 'color': '#2e7d32', 'icon': 'play', 'command': 'Start Playlist', 'args': ['Main Show', 'false', 'false']}, {'description': 'Lights Off', 'color': '#c62828', 'command': 'All Lights Off', 'args': []}, {'description': 'Dim Slider', 'color': '#1565c0', 'command': 'Volume Set', 'args': ['50'], 'adjustable': True}]}, {'title': 'Links', 'buttons': [{'description': 'Our Website', 'color': '#6a1b9a', 'command': 'Browser URL', 'args': ['https://example.com']}]}])))
+                if ip.endswith('.11') and 'fpp-AnnouncementAssistant' in p:
+                    if 'slots.php' in p: return self.send(json.dumps({'0': 'Welcome', '2': 'Tune your radio to 88.1'}))
+                    if 'trigger.php' in p: STATE['aa'] = STATE.get('aa', []) + [p.split('trigger.php')[1]]; return self.send(json.dumps({'status': 'OK', 'message': 'Triggered'}))
                 if p == '/api/models': return self.send(json.dumps([{'Name': 'Roofline', 'StartChannel': 1, 'ChannelCount': 900}, {'Name': 'Mega Tree', 'StartChannel': 901, 'ChannelCount': 1500}, {'Name': 'Unused', 'StartChannel': 0, 'ChannelCount': 10}]))
                 if p == '/api/testmode': return self.send(json.dumps(TEST))
                 if p == '/api/playlists': return self.send('["Main Show","Kids Show"]')

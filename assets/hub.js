@@ -6,6 +6,7 @@
   const KINDS = [
     { k: 'fpp', title: 'Falcon Players', one: 'Falcon Player', ico: 'tv' },
     { k: 'controller', title: 'Controllers', one: 'Controller', ico: 'cpu' },
+    { k: 'sensor', title: 'Counters & Sensors', one: 'Counter / sensor', ico: 'pulse' },
     { k: 'plug', title: 'Smart Plugs', one: 'Smart plug', ico: 'plug' },
   ];
   const FPP_PAGES = [['Status', 'index.php', 'pulse'], ['Playlists', 'playlists.php', 'list'], ['Schedule', 'scheduler.php', 'sun'], ['File manager', 'filemanager.php', 'download'], ['Channel outputs', 'channeloutputs.php', 'zap'], ['Test patterns', 'testing.php', 'zap'], ['Settings', 'settings.php', 'gear']];
@@ -116,6 +117,16 @@
         (d.notes ? '<div class="hb-note">' + esc(d.notes) + '</div>' : '') +
         '<div class="hb-chips" data-b="chips"></div><div class="hb-link" data-b="link"></div>';
       foot = openBtn(d, 'Open dashboard');
+    } else if (d.kind === 'sensor') {
+      const lid = d.type === 'lidar';
+      body =
+        '<div class="hb-bigwrap"><div class="hb-bignum" data-b="big">–</div><div class="hb-biglbl" data-b="bigl">' + (lid ? 'cars tonight' : 'devices nearby') + '</div></div>' +
+        (lid ? '<div class="hb-row" data-ctl><button class="hb-btn" data-act="car-">' + icon('minus', 14) + '<span>1 car</span></button><button class="hb-btn" data-act="car+">' + icon('plus', 14) + '<span>1 car</span></button></div>' : '') +
+        '<div class="hb-bars" data-b="bars"></div><div class="hb-spark" data-b="spark"></div>' +
+        '<div class="hb-alert" data-b="alert" hidden></div>' +
+        (d.notes ? '<div class="hb-note">' + esc(d.notes) + '</div>' : '') +
+        '<div class="hb-chips" data-b="chips"></div><div class="hb-link" data-b="link"></div>';
+      foot = openBtn(d, 'Open dashboard');
     } else {
       body =
         '<div class="hb-plugmain"><button class="hb-bigpower" data-act="toggle" data-ctl title="Toggle all outlets" aria-label="Toggle power">' + icon('power', 34) + '</button><div><div class="hb-ps" data-b="ps">–</div><div class="hb-pw hb-mono" data-b="pw"></div></div></div>' +
@@ -125,7 +136,7 @@
     }
     return '<article class="hb-card k-' + d.kind + ' t-' + esc(d.type) + ' unk" data-id="' + esc(d.id) + '">' +
       '<header class="hb-c-head"><label class="hb-sel-box"><input type="checkbox" data-selbox' + (S.sel.has(d.id) ? ' checked' : '') + '></label>' +
-      '<div class="hb-c-ico">' + icon(K.ico, 20) + '</div>' +
+      '<div class="hb-c-ico">' + icon(d.kind === 'sensor' ? (d.type === 'lidar' ? 'car' : 'users') : K.ico, 20) + '</div>' +
       '<div class="hb-c-title"><h3>' + esc(d.name) + '</h3><div class="hb-c-sub">' + sub + '</div></div>' +
       '<div class="hb-c-state"><span class="hb-dot" data-b="dot"></span><span data-b="state">Checking…</span><small data-b="since"></small></div>' +
       (S.ro ? '' : '<button class="hb-ib" data-act="menu" aria-label="Device menu">' + icon('more') + '</button>') +
@@ -169,6 +180,11 @@
     const pts = hist.map((v, i) => (i * (w / (n - 1))).toFixed(1) + ',' + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(' ');
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span>latency · max ' + max + ' ms</span>';
   }
+  function sparkN(vals) {
+    const w = 160, h = 28, max = Math.max.apply(null, vals.concat([1])), n = vals.length;
+    const pts = vals.map((v, i) => (i * (w / (n - 1))).toFixed(1) + ',' + (h - 2 - (v / max) * (h - 4)).toFixed(1)).join(' ');
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span>last 30 min · peak ' + max + '</span>';
+  }
   const chip = (label, val, cls) => '<span class="hb-chip ' + (cls || '') + '"><i>' + esc(label) + '</i>' + esc(val) + '</span>';
   const fmtT = (t) => { const [h, m] = t.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? 'a' : 'p'); };
   function watchChips(d, chips) {
@@ -210,6 +226,7 @@
     else if (online) {
       dot = 'on';
       if (d.kind === 'fpp') { state = det.fppd === false ? 'FPPD stopped' : cap(det.state) || 'Online'; if (det.fppd === false) dot = 'warn'; else if (det.state === 'playing') dot = 'play'; }
+      else if (d.kind === 'sensor') { if (det.login) { state = 'Login needed'; dot = 'warn'; } else if (d.type === 'lidar' && det.running === false) { state = 'Counter stopped'; dot = 'warn'; } else if (d.type === 'lidar' && det.sensorOk === false) { state = 'Sensor fault'; dot = 'warn'; } else state = d.type === 'lidar' && det.counting === false ? 'Idle' : 'Counting'; if (d.type === 'baldrick') state = 'Online'; }
       else if (d.kind === 'plug') { state = det.state === 'on' ? 'On' : det.state === 'off' ? 'Off' : det.state === 'mixed' ? 'Mixed' : 'Online'; dot = det.state === 'on' ? 'on' : 'idle'; }
       else state = 'Online';
     }
@@ -253,6 +270,48 @@
       watchChips(d, chips);
       card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
       const w = card.querySelector('[data-b="wled"]'); if (w) w.hidden = !(d.type === 'wled' && online);
+    } else if (d.kind === 'sensor') {
+      const lid = d.type === 'lidar';
+      const num = (v) => (v == null ? '–' : Number(v).toLocaleString());
+      let big = '–', bigl = lid ? 'cars tonight' : 'devices nearby', al = '';
+      const chips = [];
+      if (online) {
+        if (lid) {
+          if (det.login) al = (det.login === 'bad' ? 'The saved password was rejected.' : 'This counter is password protected.') + (S.ro ? '' : ' <button class="hb-btn sm" data-act="login">Enter login</button>');
+          else if (det.running === false) al = 'The counter service is not running on the Pi' + (det.http ? ' (HTTP ' + det.http + ')' : '') + '.';
+          else {
+            big = num(det.cars);
+            if (det.season != null) chips.push(chip('Season', num(det.season)));
+            if (det.offhours) chips.push(chip('Off-hours', det.offhours));
+            if (det.counting != null) chips.push(chip('Counting', det.counting ? 'yes' : 'no' + (det.reason ? ' · ' + det.reason : ''), det.counting ? '' : 'warn'));
+            if (det.fppPlaying != null) chips.push(chip('Show', det.fppPlaying ? 'playing' : 'not playing'));
+            if (det.people != null) chips.push(chip('People', '~' + num(det.people)));
+            if (det.test) chips.push(chip('Mode', 'TEST', 'warn'));
+            if (det.syncOn) chips.push(chip('Website', det.syncOk === false ? 'sync failed' : det.syncOk ? 'synced' : 'pending', det.syncOk === false ? 'bad' : ''));
+            if (det.sensorOk === false) al = 'Sensor problem: ' + esc(det.sensorError || 'no data');
+            else if (det.warnings && det.warnings.length) al = det.warnings.map(esc).join('<br>');
+            if (det.version) chips.push(chip('Counter', 'v' + det.version));
+          }
+        } else {
+          big = num(det.count);
+          if (det.count == null) al = det.http ? 'The board answered HTTP ' + det.http + ' – is the firmware up to date?' : 'No readings in the last 30 minutes.';
+          if (det.peak != null) chips.push(chip('Peak (30 min)', det.peak));
+          if (det.age != null) chips.push(chip('Reading', det.age < 90 ? 'just now' : H.ago(Math.floor(Date.now() / 1000) - det.age) + ' ago', det.age > 900 ? 'warn' : ''));
+        }
+        if (st.ms != null) chips.push(chip('Ping', st.ms + ' ms'));
+      }
+      card.classList.toggle('is-on', online && big !== '–' && big !== '0');
+      setB(card, 'big', big); setB(card, 'bigl', bigl);
+      const alEl = card.querySelector('[data-b="alert"]'); alEl.hidden = !al; if (alEl.innerHTML !== al) alEl.innerHTML = al;
+      const bars = card.querySelector('[data-b="bars"]');
+      if (bars) {
+        const hrs = online && lid && det.hours && det.hours.length === 24 ? det.hours : null;
+        if (hrs && Math.max.apply(null, hrs) > 0) { const mx = Math.max.apply(null, hrs); bars.innerHTML = hrs.map((v, i) => '<i title="' + i + ':00 · ' + v + '" style="height:' + Math.max(v ? 8 : 2, Math.round((v / mx) * 100)) + '%"></i>').join(''); bars.hidden = false; } else { bars.innerHTML = ''; bars.hidden = true; }
+        const sp = card.querySelector('[data-b="spark"]');
+        sp.innerHTML = online && !lid && det.series && det.series.length > 1 ? sparkN(det.series) : '';
+      }
+      watchChips(d, chips);
+      card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
     } else {
       card.classList.toggle('is-on', online && (det.state === 'on' || det.state === 'mixed'));
       setB(card, 'ps', !known ? '…' : !online ? 'Unreachable' : det.state === 'on' ? 'ON' : det.state === 'off' ? 'OFF' : det.state === 'mixed' ? 'PARTIAL' : '?');
@@ -434,6 +493,8 @@
     const a = t.dataset.act;
     try {
       if (a === 'menu') return deviceMenu(t, d);
+      if (a === 'car+' || a === 'car-') return act(d, 'adjust', { delta: a === 'car+' ? 1 : -1 });
+      if (a === 'login') return editDevice(d);
       if (a === 'pages') return Hub.menu(t, FPP_PAGES.map((p) => ({ label: p[0], icon: p[2], href: H.openUrl(d) + p[1] })));
       if (a === 'power') return Hub.menu(t, [
         { label: 'Restart FPPD', icon: 'refresh', onClick: async () => { if (await H.confirm('Restart the FPP daemon on ' + d.name + '?', 'Restart')) act(d, 'restart_fppd'); } },
@@ -454,7 +515,8 @@
     Hub.menu(anchor, [
       { label: 'Edit / link plug', icon: 'edit', onClick: () => editDevice(d) },
       { label: 'Refresh now', icon: 'refresh', onClick: () => refreshOne(d.id) },
-      ...(d.kind !== 'plug' && !d.local ? [{ label: (d.watch && d.watch.enabled ? 'Disable' : 'Enable') + ' auto-recovery', icon: 'pulse', onClick: async () => {
+      ...(d.kind === 'sensor' && d.type === 'lidar' ? [{ label: 'Reset today\'s count', icon: 'refresh', onClick: async () => { if (await H.confirm('Reset tonight\'s car count on ' + d.name + ' to zero?', 'Reset', true)) act(d, 'reset_today'); } }] : []),
+      ...(d.kind !== 'plug' && d.kind !== 'sensor' && !d.local ? [{ label: (d.watch && d.watch.enabled ? 'Disable' : 'Enable') + ' auto-recovery', icon: 'pulse', onClick: async () => {
         try { const r = await H.api('device_update', { id: d.id, patch: { watch: { enabled: !(d.watch && d.watch.enabled) } } }); S.cfg = r.config; S.sigCfg = ''; renderAll(); H.toast('Auto-recovery ' + (d.watch && d.watch.enabled ? 'disabled' : 'enabled') + ' for ' + d.name, 'ok'); } catch (e) { H.toast(e.message, 'err'); }
       } }] : []),
       { label: 'Copy address', icon: 'link', onClick: () => { try { navigator.clipboard.writeText(d.ip); H.toast('Copied ' + d.ip, 'ok'); } catch (e) { /* ignore */ } } },
@@ -560,18 +622,19 @@
   }
 
   function scanMenu(el) {
-    if (!el || !el.getBoundingClientRect) return scanFlow(['fpp', 'controller', 'plug']);
+    if (!el || !el.getBoundingClientRect) return scanFlow(['fpp', 'controller', 'sensor', 'plug']);
     Hub.menu(el, [
-      { label: 'Scan everything', icon: 'refresh', onClick: () => scanFlow(['fpp', 'controller', 'plug']) },
+      { label: 'Scan everything', icon: 'refresh', onClick: () => scanFlow(['fpp', 'controller', 'sensor', 'plug']) },
       '-',
       { label: 'Falcon Players only', icon: 'tv', onClick: () => scanFlow(['fpp']) },
       { label: 'Controllers only', icon: 'cpu', onClick: () => scanFlow(['controller']) },
+      { label: 'Counters & sensors only', icon: 'pulse', onClick: () => scanFlow(['sensor']) },
       { label: 'Smart plugs only', icon: 'plug', onClick: () => scanFlow(['plug']) },
     ]);
   }
 
   async function scanFlow(kinds, silent) {
-    const titles = { fpp: 'Falcon Players', controller: 'Controllers', plug: 'Smart plugs' };
+    const titles = { fpp: 'Falcon Players', controller: 'Controllers', sensor: 'Counters & sensors', plug: 'Smart plugs' };
     let m = null;
     if (!silent) {
       m = H.modal({ title: 'Searching the network', sticky: true, html: kinds.map((k) => '<div class="hb-scanrow" data-k="' + k + '"><span class="hb-spin"></span><b>' + titles[k] + '</b><span class="msg">Waiting…</span></div>').join('') + '<div id="hb-unm"></div>', buttons: [{ label: 'Close', cls: 'primary' }] });
@@ -700,6 +763,12 @@
       '<label class="hb-chk" title="When on, the Hub switches the plug at these times. When off, the schedule only tells the watchdog when the plug is supposed to be on (use this if FPP or the Kasa app already switches it)."><input type="checkbox" data-enf' + (sc.enforce ? ' checked' : '') + '> Switch plug automatically</label><button class="hb-ib" data-rmsched title="Remove">' + icon('x', 14) + '</button></div>';
   }
   function extraSections(d) {
+    if (d.kind === 'sensor') {
+      if (d.type !== 'lidar') return '';
+      const au = Object.assign({ user: 'admin', hasPass: false }, d.auth || {});
+      return '<details class="hb-fs" open><summary class="hb-sum">Counter login</summary><div class="hb-form"><div class="hb-two"><label>Username<input id="a-user" value="' + esc(au.user || 'admin') + '" autocomplete="off"></label><label>Password<input id="a-pass" type="password" placeholder="' + (au.hasPass ? '•••••• (saved – leave blank to keep)' : 'the counter page password') + '" autocomplete="new-password"></label></div>' +
+        '<p class="hb-hint">The counter\'s web page is password protected (user <b>admin</b>; set with <span class="hb-mono">sudo car-counter-passwd</span> on that Pi). The Hub needs it to read the count. It is stored in FPP\'s config folder and never sent to the browser or kiosk.</p></div></details>';
+    }
     if (d.kind === 'plug') {
       const users = S.cfg.devices.filter((x) => x.linkedPlug && x.linkedPlug.id === d.id);
       return '<details class="hb-fs" open><summary class="hb-sum">Schedule <small>(when this plug is supposed to be on)</small></summary><div id="hb-sched">' + (d.schedules || []).map(schedRow).join('') + '</div><button class="hb-btn sm" id="hb-addsched" type="button">' + icon('plus', 12) + ' Add schedule</button>' +
@@ -727,6 +796,7 @@
   }
   function wireExtra(m, d) {
     const $ = (x) => m.body.querySelector(x);
+    if (d.kind === 'sensor') return;
     if (d.kind === 'plug') {
       const box = $('#hb-sched');
       const wireRm = () => box.querySelectorAll('[data-rmsched]').forEach((b) => (b.onclick = () => b.closest('[data-sched]').remove()));
@@ -748,6 +818,7 @@
   }
   function collectExtra(m, d) {
     const $ = (x) => m.body.querySelector(x);
+    if (d.kind === 'sensor') return $('#a-user') ? { auth: { user: $('#a-user').value.trim() || 'admin', pass: $('#a-pass').value } } : {};
     if (d.kind === 'plug') {
       const rows = [...m.body.querySelectorAll('[data-sched]')];
       return { schedules: rows.map((r) => ({ days: [...r.querySelectorAll('[data-day]')].filter((c) => c.checked).map((c) => +c.dataset.day), on: r.querySelector('[data-on]').value, off: r.querySelector('[data-off]').value, enforce: r.querySelector('[data-enf]').checked })) };

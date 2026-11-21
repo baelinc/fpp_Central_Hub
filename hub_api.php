@@ -55,7 +55,7 @@ function hub_pub($cfg)
 function hub_validate_ranges(array $ranges)
 {
     $clean = array();
-    foreach (array('fpp', 'controller', 'plug') as $k) {
+    foreach (array('fpp', 'controller', 'sensor', 'plug') as $k) {
         $list = isset($ranges[$k]) && is_array($ranges[$k]) ? $ranges[$k] : array();
         $out = array();
         foreach ($list as $r) {
@@ -117,22 +117,30 @@ if ($kioskReq) {
     if (!in_array($action, $viewActions, true) && !(in_array($action, $ctlActions, true) && !$ro)) {
         hub_fail($ro ? 'Kiosk is in view-only mode' : 'Not available from the kiosk / remote view', 403);
     }
-    if ($action === 'act' && isset($in['cmd']) && in_array($in['cmd'], array('reboot', 'shutdown', 'restart_fppd'), true)) {
-        hub_fail('Reboot, shutdown and restart are not available from the kiosk / remote view', 403);
+    if ($action === 'act' && isset($in['cmd']) && in_array($in['cmd'], array('reboot', 'shutdown', 'restart_fppd', 'reset_today'), true)) {
+        hub_fail('Reboot, shutdown, restart and reset are not available from the kiosk / remote view', 403);
     }
 }
 
 try {
     switch ($action) {
         case 'bootstrap':
-            $firstRun = empty($cfg['ranges']['fpp']) && empty($cfg['ranges']['controller']) && empty($cfg['ranges']['plug']) && empty($cfg['devices']);
+            $firstRun = empty($cfg['ranges']['fpp']) && empty($cfg['ranges']['controller']) && empty($cfg['ranges']['plug']) && empty($cfg['ranges']['sensor']) && empty($cfg['devices']);
+            if (!$firstRun && empty($cfg['ranges']['sensor']) && empty($cfg['sensorRangeInit'])) {
+                // upgrade from a version without counters & sensors: start from the controller network
+                HubStore::mutate(function (&$c) {
+                    $c['sensorRangeInit'] = true;
+                    $c['ranges']['sensor'] = !empty($c['ranges']['controller']) ? $c['ranges']['controller'] : (isset($c['ranges']['plug']) ? $c['ranges']['plug'] : array());
+                });
+                $cfg = HubStore::load();
+            }
             $changed = hub_ensure_local($cfg);
             if ($changed || $firstRun) {
                 HubStore::mutate(function (&$c) use ($firstRun) {
                     hub_ensure_local($c);
                     if ($firstRun) {
                         $subs = HubNet::localSubnets();
-                        foreach (array('fpp', 'controller', 'plug') as $k) {
+                        foreach (array('fpp', 'controller', 'sensor', 'plug') as $k) {
                             $c['ranges'][$k] = $subs;
                         }
                     }
@@ -146,9 +154,9 @@ try {
 
         case 'status':
             $ids = isset($_GET['ids']) && $_GET['ids'] !== '' ? explode(',', (string) $_GET['ids']) : null;
+            HubStore::applyTimezone();
             $st = HubDrivers::statusAll($cfg, $ids);
             $st = HubMonitor::record($cfg, $st);
-            HubStore::applyTimezone();
             $w = HubStore::watch();
             $watch = array();
             foreach ($cfg['devices'] as $d) {
@@ -165,7 +173,7 @@ try {
 
         case 'scan':
             $kind = isset($in['kind']) ? $in['kind'] : '';
-            if (!in_array($kind, array('fpp', 'controller', 'plug'), true)) {
+            if (!in_array($kind, array('fpp', 'controller', 'sensor', 'plug'), true)) {
                 hub_fail('Unknown device kind');
             }
             $ranges = $cfg['ranges'][$kind];
@@ -192,7 +200,7 @@ try {
         case 'probe':
             $kind = isset($in['kind']) ? $in['kind'] : '';
             $ip = isset($in['ip']) ? trim($in['ip']) : '';
-            if (!in_array($kind, array('fpp', 'controller', 'plug'), true) || !HubNet::validIp($ip)) {
+            if (!in_array($kind, array('fpp', 'controller', 'sensor', 'plug'), true) || !HubNet::validIp($ip)) {
                 hub_fail('Enter a valid IP address or hostname');
             }
             list($rec, $reachable) = HubDrivers::probe($cfg, $kind, $ip, isset($in['port']) ? (int) $in['port'] : 0);
@@ -304,6 +312,19 @@ try {
                         }
                         $d['ssh'] = $x;
                     }
+                    if (isset($patch['auth']) && is_array($patch['auth']) && $d['kind'] === 'sensor') {
+                        $au = isset($d['auth']) && is_array($d['auth']) ? $d['auth'] : array('user' => 'admin', 'pass' => '');
+                        if (isset($patch['auth']['user'])) {
+                            $au['user'] = preg_replace('/[^A-Za-z0-9._@-]/', '', (string) $patch['auth']['user']);
+                        }
+                        if (isset($patch['auth']['pass']) && $patch['auth']['pass'] !== '') {
+                            $au['pass'] = (string) $patch['auth']['pass'];
+                        }
+                        if (!empty($patch['auth']['clearPass'])) {
+                            $au['pass'] = '';
+                        }
+                        $d['auth'] = $au;
+                    }
                     if (array_key_exists('schedules', $patch) && $d['kind'] === 'plug') {
                         $d['schedules'] = HubSchedule::clean($patch['schedules']);
                     }
@@ -367,7 +388,7 @@ try {
                 hub_log($d['name'] . ': ' . $what . ($ok ? '' : ' - FAILED'), $ok ? 'info' : 'warn', $id);
             }
             $resp = array('ok' => $ok, 'msg' => $msg);
-            if ($d['kind'] === 'plug' && is_array($data)) {
+            if (($d['kind'] === 'plug' || $d['kind'] === 'sensor') && is_array($data)) {
                 $resp['status'] = $data;
             } else {
                 $resp['data'] = $data;

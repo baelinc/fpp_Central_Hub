@@ -22,6 +22,10 @@ class HubDrivers
                 'wled' => array('label' => 'WLED', 'vendor' => 'WLED'),
                 'other' => array('label' => 'Other controller', 'vendor' => ''),
             ),
+            'sensor' => array(
+                'lidar' => array('label' => 'Christmas Lidar Counter', 'vendor' => 'DIY (baelinc)'),
+                'baldrick' => array('label' => 'BaldrickSignals', 'vendor' => 'BaldrickSignals'),
+            ),
             'plug' => array(
                 'kasa' => array('label' => 'TP-Link Kasa', 'vendor' => 'TP-Link'),
                 'tasmota' => array('label' => 'Tasmota', 'vendor' => 'Tasmota'),
@@ -117,6 +121,12 @@ class HubDrivers
         if (strpos($hay, 'falcon player') !== false) {
             return array(null, null); // an FPP instance, handled by the FPP scan
         }
+        if (strpos($hay, 'baldricksignals') !== false || strpos($hay, 'baldrick signals') !== false) {
+            return array(null, null); // a BaldrickSignals crowd board, handled by the sensor scan
+        }
+        if (strpos($hay, 'christmas lidar counter') !== false) {
+            return array(null, null); // the lidar car counter, handled by the sensor scan
+        }
         $title = self::title($res['body']);
         $types = self::types();
         foreach ($sigs as $sig) {
@@ -138,6 +148,274 @@ class HubDrivers
             $server = trim($m[1]);
         }
         return array(null, array('ip' => $ip, 'port' => $port, 'title' => $title, 'server' => $server, 'code' => (int) $res['code']));
+    }
+
+    // ------------------------------------------------- counters & sensors
+
+    const LIDAR_API = '/plugin.php?page=ajax.php&nopage=1&action=';
+
+    /** HTTP Basic header for devices that need a login (the lidar counter page is password protected). */
+    private static function authHdr(array $d)
+    {
+        if (!empty($d['auth']['pass'])) {
+            $u = !empty($d['auth']['user']) ? $d['auth']['user'] : 'admin';
+            return array('Authorization: Basic ' . base64_encode($u . ':' . $d['auth']['pass']));
+        }
+        return array();
+    }
+
+    /** The counter answers 401 (realm "Christmas Lidar Counter") until logged in, so it can be recognised without the password. */
+    public static function identLidar($ip, $port, $res)
+    {
+        if (!$res || (int) $res['code'] < 100) {
+            return null;
+        }
+        $hay = strtolower($res['headers'] . "\n" . substr($res['body'], 0, 4096));
+        if (strpos($hay, 'christmas lidar counter') === false) {
+            return null;
+        }
+        $last = substr(strrchr($ip, '.'), 1);
+        return array('type' => 'lidar', 'name' => 'Car Counter .' . $last, 'ip' => $ip, 'port' => $port, 'uid' => '', 'model' => 'Lidar',
+            'extra' => array('login' => (int) $res['code'] === 401));
+    }
+
+    /** Parse a BaldrickSignals CSV export. Returns array(ok, header, rows => [[epoch|null, count], ...]). */
+    public static function parseBoardCsv($text, $truncated = false)
+    {
+        $res = array('ok' => false, 'header' => null, 'rows' => array());
+        $lines = array_values(array_filter(preg_split('/\r\n|\r|\n/', (string) $text), function ($l) {
+            return trim($l) !== '';
+        }));
+        if ($truncated && count($lines) > 1) {
+            array_pop($lines); // last line was cut off
+        }
+        if (!$lines) {
+            return $res;
+        }
+        $sample = implode("\n", array_slice($lines, 0, 20));
+        $delim = ',';
+        $best = 0;
+        foreach (array(',', ';', "\t", '|') as $dl) {
+            $c = substr_count($sample, $dl);
+            if ($c > $best) {
+                $best = $c;
+                $delim = $dl;
+            }
+        }
+        if ($best < 1) {
+            return $res;
+        }
+        $table = array();
+        foreach ($lines as $ln) {
+            $table[] = array_map('trim', str_getcsv($ln, $delim, '"', '\\'));
+        }
+        $isTime = function ($v) {
+            return (is_numeric($v) && (float) $v >= 1e9) || preg_match('/\d{1,4}[-\/:]\d{1,2}/', $v);
+        };
+        $first = $table[0];
+        $hasData = false;
+        foreach ($first as $c) {
+            if ($c !== '' && (is_numeric($c) || $isTime($c))) {
+                $hasData = true;
+            }
+        }
+        if (!$hasData) {
+            $res['header'] = $first;
+            array_shift($table);
+        }
+        if (!$table) {
+            return $res;
+        }
+        $ncols = 0;
+        foreach ($table as $r) {
+            $ncols = max($ncols, count($r));
+        }
+        $body = array_slice($table, -200);
+        $vals = function ($i) use ($body) {
+            $o = array();
+            foreach ($body as $r) {
+                if (isset($r[$i]) && $r[$i] !== '') {
+                    $o[] = $r[$i];
+                }
+            }
+            return $o;
+        };
+        $tcol = null;
+        $dcol = null;
+        for ($i = 0; $i < $ncols; $i++) {
+            $v = $vals($i);
+            if ($v && count(array_filter($v, $isTime)) === count($v)) {
+                $tcol = $i;
+                break;
+            }
+        }
+        if ($tcol !== null && $tcol + 1 < $ncols) {
+            $a = $vals($tcol);
+            $b = $vals($tcol + 1);
+            $dateOnly = count(array_filter($a, function ($v) {
+                return preg_match('/^\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}$/', $v);
+            })) === count($a);
+            $timeOnly = $b && count(array_filter($b, function ($v) {
+                return preg_match('/^\d{1,2}:\d{2}/', $v);
+            })) === count($b);
+            if ($dateOnly && $timeOnly) {
+                $dcol = $tcol;
+                $tcol = $tcol + 1;
+            }
+        }
+        $ccol = null;
+        $numeric = array();
+        for ($i = 0; $i < $ncols; $i++) {
+            $v = $vals($i);
+            if ($i !== $tcol && $i !== $dcol && $v && count(array_filter($v, 'is_numeric')) === count($v)) {
+                $numeric[] = $i;
+            }
+        }
+        if ($numeric) {
+            foreach ($numeric as $i) {
+                $h = $res['header'] && isset($res['header'][$i]) ? $res['header'][$i] : '';
+                if ($h !== '' && preg_match('/people|crowd|device|signal|count|number|total|detect/i', $h)) {
+                    $ccol = $i;
+                    break;
+                }
+            }
+            if ($ccol === null) {
+                $ccol = end($numeric);
+            }
+        }
+        if ($ccol === null) {
+            return $res;
+        }
+        foreach ($table as $r) {
+            if (!isset($r[$ccol]) || !is_numeric($r[$ccol])) {
+                continue;
+            }
+            $ts = null;
+            if ($tcol !== null && isset($r[$tcol])) {
+                $cell = ($dcol !== null && isset($r[$dcol])) ? $r[$dcol] . ' ' . $r[$tcol] : $r[$tcol];
+                if (is_numeric($cell)) {
+                    $ts = (float) $cell > 1e12 ? (float) $cell / 1000 : (float) $cell;
+                } else {
+                    $t = strtotime($cell);
+                    $ts = $t === false ? null : $t;
+                }
+            }
+            $res['rows'][] = array($ts, max(0, (int) round((float) $r[$ccol])));
+        }
+        $res['ok'] = !empty($res['rows']);
+        return $res;
+    }
+
+    public static function identBaldrick($ip, $port, $res)
+    {
+        if (!$res || (int) $res['code'] !== 200) {
+            return null;
+        }
+        $body = trim($res['body']);
+        if ($body === '' || strpos($body, '<') !== false) {
+            return null; // empty, or a web page rather than CSV
+        }
+        $p = self::parseBoardCsv($body, $res['err'] !== '');
+        $ok = $p['ok'];
+        if (!$ok && $p['header']) {
+            $h = implode(',', $p['header']);
+            $ok = preg_match('/time|date/i', $h) && preg_match('/count|device|signal|people|phone/i', $h);
+        }
+        if (!$ok) {
+            return null;
+        }
+        $last = substr(strrchr($ip, '.'), 1);
+        return array('type' => 'baldrick', 'name' => 'BaldrickSignals .' . $last, 'ip' => $ip, 'port' => $port, 'uid' => '', 'model' => '', 'extra' => array());
+    }
+
+    private static function boardUrl(array $d, $mins)
+    {
+        return self::base($d) . '/turnip_data_log/data?format=csv&mark_discontinuities=0&from=' . (time() - $mins * 60);
+    }
+
+    private static function lidarDetail(array $j)
+    {
+        $s = isset($j['status']) && is_array($j['status']) ? $j['status'] : null;
+        if (!$s) {
+            return array('running' => false);
+        }
+        $today = isset($s['today']) && is_array($s['today']) ? $s['today'] : array();
+        $sensor = isset($s['sensor']) && is_array($s['sensor']) ? $s['sensor'] : array();
+        $cnt = isset($s['counting']) && is_array($s['counting']) ? $s['counting'] : array();
+        $sync = isset($s['sync']) && is_array($s['sync']) ? $s['sync'] : array();
+        $ppl = isset($s['people']) && is_array($s['people']) ? $s['people'] : array();
+        $pt = isset($ppl['today']) && is_array($ppl['today']) ? $ppl['today'] : null;
+        return array(
+            'running' => !empty($j['running']),
+            'cars' => isset($today['total']) ? (int) $today['total'] : 0,
+            'offhours' => isset($today['offhours']) ? (int) $today['offhours'] : 0,
+            'hours' => isset($today['hours']) && is_array($today['hours']) ? array_map('intval', $today['hours']) : array(),
+            'season' => isset($s['season_total']) ? (int) $s['season_total'] : null,
+            'sensorOk' => isset($sensor['ok']) ? (bool) $sensor['ok'] : null,
+            'sensorError' => isset($sensor['error']) ? (string) $sensor['error'] : '',
+            'distance' => isset($sensor['distance_cm']) ? $sensor['distance_cm'] : null,
+            'counting' => isset($cnt['active']) ? (bool) $cnt['active'] : null,
+            'reason' => isset($cnt['reason']) ? (string) $cnt['reason'] : '',
+            'fppPlaying' => array_key_exists('fpp_playing', $s) ? $s['fpp_playing'] : null,
+            'test' => !empty($s['test_mode']),
+            'warnings' => isset($s['warnings']) && is_array($s['warnings']) ? array_slice(array_map('strval', $s['warnings']), 0, 3) : array(),
+            'version' => isset($s['version']) ? (string) $s['version'] : '',
+            'uptime' => isset($s['uptime']) ? (int) $s['uptime'] : null,
+            'syncOn' => !empty($s['sync_enabled']),
+            'syncOk' => isset($sync['last_ok']) ? (bool) $sync['last_ok'] : null,
+            'syncMsg' => isset($sync['message']) ? (string) $sync['message'] : '',
+            'people' => $pt && isset($pt['people']) ? (int) $pt['people'] : null,
+            'peoplePeak' => $pt && isset($pt['people_peak']) ? (int) $pt['people_peak'] : null,
+        );
+    }
+
+    private static function boardDetail($body, $truncated, $tail = 0)
+    {
+        $p = self::parseBoardCsv($body, $truncated);
+        $rows = $p['rows'];
+        if ($tail && count($rows) > $tail) {
+            $rows = array_slice($rows, -$tail);
+        }
+        if (!$rows) {
+            return array('count' => null, 'rows' => 0);
+        }
+        $last = end($rows);
+        $counts = array();
+        foreach ($rows as $r) {
+            $counts[] = $r[1];
+        }
+        $age = $last[0] !== null ? (int) (time() - $last[0]) : null;
+        return array(
+            'count' => $last[1], 'age' => ($age !== null && $age >= -300 && $age < 3600) ? max(0, $age) : null, // shown only when the board's clock plausibly matches ours
+            'peak' => max($counts), 'rows' => count($rows), 'series' => array_slice($counts, -40),
+        );
+    }
+
+    private static function actLidar(array $cfg, array $d, $cmd, array $args)
+    {
+        if (!in_array($cmd, array('adjust', 'reset_today', 'test_mode'), true)) {
+            return array(false, 'Unknown counter command', null);
+        }
+        $payload = array('cmd' => $cmd);
+        if ($cmd === 'adjust') {
+            $payload['delta'] = (isset($args['delta']) && (int) $args['delta'] < 0) ? -1 : 1;
+        }
+        if ($cmd === 'test_mode') {
+            $payload['on'] = !empty($args['on']);
+        }
+        $h = array_merge(array('Content-Type: application/json', 'X-Requested-With: hub'), self::authHdr($d));
+        $r = HubNet::http(self::base($d) . self::LIDAR_API . 'command', 'POST', json_encode($payload), 6000, $h);
+        if ((int) $r['code'] === 401) {
+            return array(false, 'Login needed - enter the counter\'s password in Edit', null);
+        }
+        $j = json_decode($r['body'], true);
+        if ((int) $r['code'] !== 200 || !is_array($j) || empty($j['ok'])) {
+            return array(false, is_array($j) && !empty($j['error']) ? (string) $j['error'] : 'The counter did not accept the command', null);
+        }
+        usleep(1300000); // the counter service applies queued commands about once a second
+        $st = self::statusAll($cfg, array($d['id']));
+        $msgs = array('adjust' => ((isset($payload['delta']) && $payload['delta'] < 0) ? '-1' : '+1') . ' car', 'reset_today' => 'Today reset', 'test_mode' => 'Test mode ' . (!empty($payload['on']) ? 'on' : 'off'));
+        return array(true, $msgs[$cmd], isset($st[$d['id']]) ? $st[$d['id']] : null);
     }
 
     public static function identKasa($ip, $port, array $si)
@@ -278,6 +556,25 @@ class HubDrivers
             }
             return array('found' => $found, 'unmatched' => array(), 'scanned' => count($ips));
         }
+        if ($kind === 'sensor') {
+            $reqs = array();
+            foreach ($ips as $ip) {
+                $reqs["l|$ip"] = array('url' => "http://$ip/", 'max' => 16384) + $o;
+                $reqs["b|$ip"] = array('url' => "http://$ip/turnip_data_log/data?format=csv&mark_discontinuities=0&from=" . (time() - 3600), 'max' => 65536) + $o;
+            }
+            $seen = array();
+            $res = HubNet::multi($reqs, 128);
+            foreach ($ips as $ip) {
+                $rec = self::identLidar($ip, 80, $res["l|$ip"]);
+                if (!$rec) {
+                    $rec = self::identBaldrick($ip, 80, $res["b|$ip"]);
+                }
+                if ($rec) {
+                    $found[] = $rec;
+                }
+            }
+            return array('found' => $found, 'unmatched' => array(), 'scanned' => count($ips));
+        }
         return array('found' => array(), 'unmatched' => array(), 'scanned' => 0);
     }
 
@@ -295,6 +592,17 @@ class HubDrivers
             $r = HubNet::http("http://$host/", 'GET', null, $o['timeout_ms']);
             list($rec, $un) = self::identController($ip, $port, $r, self::signatures($cfg));
             return array($rec, $r['code'] > 0);
+        }
+        if ($kind === 'sensor') {
+            $rs = HubNet::multi(array(
+                'l' => array('url' => "http://$host/", 'max' => 16384) + $o,
+                'b' => array('url' => "http://$host/turnip_data_log/data?format=csv&mark_discontinuities=0&from=" . (time() - 3600), 'max' => 65536) + $o,
+            ), 2);
+            $rec = self::identLidar($ip, $port, $rs['l']);
+            if (!$rec) {
+                $rec = self::identBaldrick($ip, $port, $rs['b']);
+            }
+            return array($rec, $rs['l']['code'] > 0 || $rs['b']['code'] > 0);
         }
         if ($kind === 'plug') {
             $kp = $port == 80 ? 9999 : $port;
@@ -426,6 +734,10 @@ class HubDrivers
                 $reqs[$id] = $d['type'] === 'wled'
                     ? array('url' => $b . '/json/info') + $o
                     : array('url' => $b . '/', 'max' => 4096) + $o;
+            } elseif ($d['kind'] === 'sensor') {
+                $reqs[$id] = $d['type'] === 'baldrick'
+                    ? array('url' => self::boardUrl($d, 30), 'max' => 131072) + $o
+                    : array('url' => $b . self::LIDAR_API . 'status', 'max' => 65536, 'headers' => self::authHdr($d)) + $o;
             } elseif ($d['kind'] === 'plug') {
                 if ($d['type'] === 'kasa') {
                     $kasa[$id] = $d;
@@ -444,6 +756,11 @@ class HubDrivers
         foreach ($res as $id => $r) {
             if ($devs[$id]['kind'] === 'fpp' && !self::jsonBody($r)) {
                 $retry[$id] = array('url' => self::base($devs[$id]) . '/api/system/info') + $o;
+            }
+        }
+        foreach ($res as $id => $r) {
+            if ($devs[$id]['kind'] === 'sensor' && $devs[$id]['type'] === 'baldrick' && (int) $r['code'] === 404) {
+                $retry[$id] = array('url' => self::base($devs[$id]) . '/csv', 'max' => 2097152) + $o; // older firmware
             }
         }
         $res2 = $retry ? HubNet::multi($retry, 32) : array();
@@ -473,6 +790,23 @@ class HubDrivers
                         $det['rssi'] = isset($j['wifi']['rssi']) ? (int) $j['wifi']['rssi'] : null;
                     }
                     $st = array('online' => true, 'ms' => $r['ms'], 'detail' => $det);
+                }
+            } elseif ($d['kind'] === 'sensor') {
+                $code = (int) $r['code'];
+                if ($d['type'] === 'baldrick') {
+                    if ($code === 200) {
+                        $st = array('online' => true, 'ms' => $r['ms'], 'detail' => self::boardDetail($r['body'], $r['err'] !== ''));
+                    } elseif (isset($res2[$id]) && (int) $res2[$id]['code'] === 200) {
+                        $st = array('online' => true, 'ms' => $res2[$id]['ms'], 'detail' => self::boardDetail($res2[$id]['body'], false, 400));
+                    } elseif ($code > 0) {
+                        $st = array('online' => true, 'ms' => $r['ms'], 'detail' => array('count' => null, 'rows' => 0, 'http' => $code));
+                    }
+                } elseif ($code === 401) {
+                    $st = array('online' => true, 'ms' => $r['ms'], 'detail' => array('login' => !empty($d['auth']['pass']) ? 'bad' : 'needed'));
+                } elseif (($j = self::jsonBody($r)) !== null) {
+                    $st = array('online' => true, 'ms' => $r['ms'], 'detail' => self::lidarDetail($j));
+                } elseif ($code > 0) {
+                    $st = array('online' => true, 'ms' => $r['ms'], 'detail' => array('running' => false, 'http' => $code));
                 }
             } elseif ($d['type'] === 'tasmota') {
                 $j = self::jsonBody($r);
@@ -529,6 +863,9 @@ class HubDrivers
         }
         if ($d['kind'] === 'plug') {
             return self::actPlug($cfg, $d, $cmd, $args);
+        }
+        if ($d['kind'] === 'sensor' && $d['type'] === 'lidar') {
+            return self::actLidar($cfg, $d, $cmd, $args);
         }
         if ($d['kind'] === 'controller' && $d['type'] === 'wled') {
             $b = self::base($d);

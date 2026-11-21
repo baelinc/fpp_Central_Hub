@@ -214,3 +214,19 @@ body.hb-idle.hb-page{cursor:none}
 .hub.compact .hb-plugmain{gap:12px}.hub.compact .hb-ps{font-size:18px}
 .hub.compact .hb-btn{padding:6px 10px}.hub.compact .hb-sel{padding:6px 8px}
 .hub.compact .hb-sec{margin-top:14px}
+
+/* ---- counters & sensors ---- */
+.hub{--k-sensor:#34d399}
+.hub .hb-sec[data-kind=sensor] h2 .hb-i{color:var(--k-sensor)}
+.hub .hb-card.k-sensor{--k:var(--k-sensor)}
+.hub .hb-bigwrap{display:flex;align-items:baseline;gap:10px;padding:4px 2px}
+.hub .hb-bignum{font-size:46px;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.hub .hb-card.is-on .hb-bignum{color:var(--k)}
+.hub .hb-biglbl{color:var(--mut);font-size:13px}
+.hub .hb-bars{display:flex;align-items:flex-end;gap:2px;height:34px}
+.hub .hb-bars[hidden]{display:none}
+.hub .hb-bars i{flex:1;background:color-mix(in srgb,var(--k) 70%,transparent);border-radius:2px 2px 0 0;min-height:2px}
+.hub .hb-alert{background:color-mix(in srgb,var(--warn,#fbbf24) 14%,transparent);border:1px solid color-mix(in srgb,var(--warn,#fbbf24) 40%,transparent);border-radius:10px;padding:8px 10px;font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hub .hb-alert[hidden]{display:none}
+.hub.compact .hb-bars,.hub.compact .hb-biglbl{display:none}
+.hub.compact .hb-bignum{font-size:28px}

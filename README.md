@@ -6,6 +6,7 @@ A Falcon Player (FPP) plugin that gives you one dashboard for your whole show ne
 
 * **Falcon Players** – discovers every FPP on the network (plus MultiSync-known ones) and shows live cards: now playing + progress, playlist start/stop, volume, temperature, uptime, scheduler, restart FPPD / reboot / shutdown, quick links to FPP pages, and **Open FPP** in a new window.
 * **Controllers** (kept separate) – Kulp, Falcon/Baldrick, Experience Lights, Pixel2Things, Hanson Electronics, ESPixelStick (Forkineye), WLED. Status cards with latency history and **Open dashboard** in a new window.
+* **Counters & sensors** – the [Christmas Lidar Counter](https://github.com/baelinc/christmas_lidar_counter) (cars tonight, hourly bars, season total, sensor health, ±1 correction buttons) and **BaldrickSignals** crowd boards (devices nearby, 30-minute trend). Add the counter's web password under Edit → Counter login; it is stored on the FPP only and never sent to the browser.
 * **Smart plugs** – TP-Link Kasa (KP401, KP303, HS103…), Tasmota and Shelly, all controlled locally. Big on/off cards, per-outlet switches, power draw when available.
 * **Per-type network ranges** – e.g. plugs on `192.168.1.x`, FPP/controllers on `192.168.80.x` (Settings → Network ranges). CIDR, `a.b.c.10-50`, `a.b.c.X` or single IPs.
 * **Scan button** to search on demand, plus **manual add / remove** (with “test connection” auto-detection) and an ignore list so removed devices stay removed.

@@ -8,7 +8,7 @@
  */
 class HubStore
 {
-    const VERSION = '1.2.0';
+    const VERSION = '1.3.0';
 
     public static function dir()
     {
@@ -38,7 +38,7 @@ class HubStore
     {
         return array(
             'version' => 1,
-            'ranges' => array('fpp' => array(), 'controller' => array(), 'plug' => array()),
+            'ranges' => array('fpp' => array(), 'controller' => array(), 'sensor' => array(), 'plug' => array()),
             'options' => array(
                 'refreshSeconds' => 5,
                 'theme' => 'dark',
@@ -116,6 +116,10 @@ class HubStore
     public static function publicConfig(array $cfg)
     {
         foreach ($cfg['devices'] as $i => $d) {
+            if (isset($d['auth'])) {
+                $cfg['devices'][$i]['auth']['hasPass'] = !empty($d['auth']['pass']);
+                unset($cfg['devices'][$i]['auth']['pass']);
+            }
             if (isset($d['ssh'])) {
                 $cfg['devices'][$i]['ssh']['hasPass'] = !empty($d['ssh']['pass']);
                 unset($cfg['devices'][$i]['ssh']['pass']);

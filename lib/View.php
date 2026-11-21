@@ -13,7 +13,7 @@ function hub_render($which, array $o = array())
     $kiosk = !empty($o['kiosk']);
     $cfg = HubStore::load();
     $sfx = $standalone ? '&nopage=1' : '';
-    $kind = isset($_GET['kind']) && in_array($_GET['kind'], array('fpp', 'controller', 'plug'), true) ? $_GET['kind'] : '';
+    $kind = isset($_GET['kind']) && in_array($_GET['kind'], array('fpp', 'controller', 'sensor', 'plug'), true) ? $_GET['kind'] : '';
     $boot = array(
         'apiUrl' => 'plugin.php?plugin=fpp_Central_Hub&page=hub_api.php&nopage=1',
         'kiosk' => $kiosk,

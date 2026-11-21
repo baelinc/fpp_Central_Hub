@@ -922,6 +922,22 @@ class HubDrivers
                 $v = max(0, min(100, (int) (isset($args['value']) ? $args['value'] : 0)));
                 $r = self::fppGet($cfg, $d, '/api/system/volume', 'POST', json_encode(array('volume' => $v)));
                 return array($r['code'] >= 200 && $r['code'] < 300, 'Volume ' . $v . '%', null);
+            case 'testmode_get':
+                $r = self::fppGet($cfg, $d, '/api/testmode');
+                $j = self::jsonBody($r);
+                return array($j !== null, $j === null ? 'Could not read test mode' : '', $j);
+            case 'testmode_set':
+                $on = !empty($args['enabled']);
+                $presets = array('chase' => array('RGBChase', 'RGBChase-RGB'), 'cycle' => array('RGBCycle', 'RGBCycle-RGB'));
+                $pk = isset($args['preset'], $presets[$args['preset']]) ? $args['preset'] : 'chase';
+                $set = isset($args['channelSet']) ? preg_replace('/[^0-9,\-]/', '', (string) $args['channelSet']) : '';
+                $ms = isset($args['cycleMS']) ? max(100, min(10000, (int) $args['cycleMS'])) : 1000;
+                $body = array('mode' => $presets[$pk][0], 'subMode' => $presets[$pk][1], 'cycleMS' => $ms, 'colorPattern' => 'FF000000FF000000FF',
+                    'enabled' => $on ? 1 : 0, 'channelSet' => $set !== '' ? $set : '1-1048576', 'channelSetType' => 'channelRange');
+                $r = self::fppGet($cfg, $d, '/api/testmode', 'POST', json_encode($body));
+                $j = json_decode($r['body'], true);
+                $ok = $r['code'] >= 200 && $r['code'] < 300 && is_array($j) && isset($j['status']) && $j['status'] === 'OK';
+                return array($ok, $ok ? ($on ? 'Test pattern running' : 'Test stopped') : 'FPP did not accept the test command', null);
             case 'restart_fppd':
                 $r = self::fppGet($cfg, $d, '/api/system/fppd/restart');
                 return array($r['code'] >= 200 && $r['code'] < 300, 'Restarting FPPD', null);

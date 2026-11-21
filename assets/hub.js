@@ -9,6 +9,7 @@
     { k: 'sensor', title: 'Counters & Sensors', one: 'Counter / sensor', ico: 'pulse' },
     { k: 'plug', title: 'Smart Plugs', one: 'Smart plug', ico: 'plug' },
   ];
+  const NOPLAY = ['remote', 'bridge']; // modes with no playlists / scheduler of their own
   const FPP_PAGES = [['Status', 'index.php', 'pulse'], ['Playlists', 'playlists.php', 'list'], ['Schedule', 'scheduler.php', 'sun'], ['File manager', 'filemanager.php', 'download'], ['Channel outputs', 'channeloutputs.php', 'zap'], ['Test patterns', 'testing.php', 'zap'], ['Settings', 'settings.php', 'gear']];
   const S = { cfg: null, types: {}, status: {}, recv: {}, tab: B.kind || 'all', group: '', q: '', sel: new Set(), selMode: false, playlists: {}, drag: new Set(), polling: false, ro: false, timer: null, sigCfg: '', acted: {}, watch: {}, monitor: null };
 
@@ -98,17 +99,17 @@
 
   function cardHTML(d) {
     const K = KINDS.find((x) => x.k === d.kind);
-    const sub = esc(typeLabel(d)) + (d.local ? ' <b class="hb-tag">this unit</b>' : '') + '<br><span class="hb-mono">' + esc(d.ip) + '</span>' + (d.group ? ' · ' + esc(d.group) : '');
+    const sub = esc(typeLabel(d)) + (d.local ? ' <b class="hb-tag">this unit</b>' : '') + (d.kind === 'fpp' ? ' <b class="hb-tag hb-modetag" data-b="mode" hidden></b>' : '') + '<br><span class="hb-mono">' + esc(d.ip) + '</span>' + (d.group ? ' · ' + esc(d.group) : '');
     let body = '', foot = '';
     if (d.kind === 'fpp') {
       body =
         '<div class="hb-np"><div class="hb-np-t" data-b="npT">—</div><div class="hb-np-s" data-b="npS"></div><div class="hb-bar"><i data-b="bar"></i></div><div class="hb-np-time"><span data-b="el">0:00</span><span data-b="rem"></span></div></div>' +
-        '<div class="hb-row" data-ctl><select class="hb-sel" data-b="pl"><option value="">Select playlist…</option></select><button class="hb-btn primary" data-act="start">' + icon('play', 14) + '<span>Start</span></button></div>' +
-        '<div class="hb-row" data-ctl><button class="hb-btn" data-act="stop">' + icon('stop', 14) + '<span>Stop</span></button><button class="hb-btn ghost" data-act="stopgraceful">Gentle stop</button><label class="hb-chk"><input type="checkbox" data-b="repeat"> Repeat</label></div>' +
+        '<div class="hb-row" data-ctl data-play><select class="hb-sel" data-b="pl"><option value="">Select playlist…</option></select><button class="hb-btn primary" data-act="start">' + icon('play', 14) + '<span>Start</span></button></div>' +
+        '<div class="hb-row" data-ctl data-play><button class="hb-btn" data-act="stop">' + icon('stop', 14) + '<span>Stop</span></button><button class="hb-btn ghost" data-act="stopgraceful">Gentle stop</button><label class="hb-chk"><input type="checkbox" data-b="repeat"> Repeat</label></div>' +
         '<div class="hb-row hb-vol" data-ctl>' + icon('volume', 16) + '<input type="range" min="0" max="100" data-b="vol"><span data-b="volv" class="hb-mono">–</span></div>' +
         '<div class="hb-chips" data-b="chips"></div>' +
         '<div class="hb-link" data-b="link"></div>';
-      foot = openBtn(d, 'Open FPP') + '<button class="hb-btn" data-act="pages">' + icon('list', 16) + '<span>Pages</span></button><button class="hb-btn" data-act="power" data-ctl>' + icon('power', 16) + '<span>Power</span></button>';
+      foot = openBtn(d, 'Open FPP') + '<button class="hb-btn" data-act="pages">' + icon('list', 16) + '<span>Pages</span></button><button class="hb-btn" data-act="test" data-ctl title="Run a channel test pattern">' + icon('zap', 16) + '<span>Test</span></button><button class="hb-btn" data-act="power" data-ctl>' + icon('power', 16) + '<span>Power</span></button>';
     } else if (d.kind === 'controller') {
       body =
         '<div class="hb-kv"><div><span>Status</span><b data-b="ctl">–</b></div><div><span>Latency</span><b data-b="lat" class="hb-mono">–</b></div><div><span>Page title</span><b data-b="ttl">–</b></div></div>' +
@@ -236,9 +237,13 @@
 
     if (d.kind === 'fpp') {
       const playing = online && det.state === 'playing';
+      const noPlay = online && NOPLAY.indexOf(det.mode) >= 0;
       card.classList.toggle('playing', playing);
-      setB(card, 'npT', !online ? '—' : det.fppd === false ? 'FPPD is not running' : playing ? (det.playlist || det.sequence || 'Playing') : 'Idle');
-      setB(card, 'npS', !online ? '' : playing ? (det.sequence && det.sequence !== det.playlist ? det.sequence : '') : (det.nextName ? 'Next: ' + det.nextName + (det.nextTime ? ' · ' + det.nextTime : '') : (det.schedEnabled === false ? 'Scheduler disabled' : '')));
+      card.classList.toggle('remote', noPlay);
+      const mt = card.querySelector('[data-b="mode"]');
+      if (mt) { mt.hidden = !(online && det.mode); mt.textContent = det.mode ? det.mode.toUpperCase() : ''; mt.classList.toggle('remote', noPlay); }
+      setB(card, 'npT', !online ? '—' : det.fppd === false ? 'FPPD is not running' : playing ? (det.playlist || det.sequence || 'Playing') : noPlay ? (det.mode === 'remote' ? 'Waiting for the master' : 'Bridge mode') : 'Idle');
+      setB(card, 'npS', !online ? '' : playing ? (det.sequence && det.sequence !== det.playlist ? det.sequence : '') : noPlay ? (det.mode === 'remote' ? 'Remote mode – the master starts and stops shows' : '') : (det.nextName ? 'Next: ' + det.nextName + (det.nextTime ? ' · ' + det.nextTime : '') : (det.schedEnabled === false ? 'Scheduler disabled' : '')));
       tickCard(card);
       const vol = card.querySelector('[data-b="vol"]');
       if (vol && det.volume != null && !S.drag.has(d.id)) { vol.value = det.volume; setB(card, 'volv', det.volume + '%'); }
@@ -247,13 +252,12 @@
         if (det.temp != null) chips.push(chip('Temp', det.temp.toFixed(0) + '°C', det.temp > 75 ? 'bad' : det.temp > 65 ? 'warn' : ''));
         if (det.uptime) chips.push(chip('Up', det.uptime));
         if (det.version) chips.push(chip('FPP', 'v' + det.version));
-        if (det.mode) chips.push(chip('Mode', det.mode));
         if (det.warnings) chips.push(chip('Warnings', det.warnings, 'warn'));
         if (st.ms != null) chips.push(chip('Ping', st.ms + ' ms'));
       }
       watchChips(d, chips);
       card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
-      if (online && det.fppd !== false) ensurePlaylists(d, card);
+      if (online && det.fppd !== false && !noPlay) ensurePlaylists(d, card);
     } else if (d.kind === 'controller') {
       setB(card, 'ctl', known ? (online ? 'Online' : 'Down') : '–');
       setB(card, 'lat', online && st.ms != null ? st.ms + ' ms' : '–');
@@ -495,6 +499,7 @@
       if (a === 'menu') return deviceMenu(t, d);
       if (a === 'car+' || a === 'car-') return act(d, 'adjust', { delta: a === 'car+' ? 1 : -1 });
       if (a === 'login') return editDevice(d);
+      if (a === 'test') return testDialog(d);
       if (a === 'pages') return Hub.menu(t, FPP_PAGES.map((p) => ({ label: p[0], icon: p[2], href: H.openUrl(d) + p[1] })));
       if (a === 'power') return Hub.menu(t, [
         { label: 'Restart FPPD', icon: 'refresh', onClick: async () => { if (await H.confirm('Restart the FPP daemon on ' + d.name + '?', 'Restart')) act(d, 'restart_fppd'); } },
@@ -510,6 +515,31 @@
       if (a === 'cycle') return powerCycle(d);
     } catch (err) { /* toast already shown */ }
   });
+
+  async function testDialog(d) {
+    let cur = null;
+    try { cur = (await H.api('act', { id: d.id, cmd: 'testmode_get', args: {} })).data; } catch (e) { /* offline: dialog still opens */ }
+    const det = (S.status[d.id] || {}).detail || {};
+    let on = !!(cur && Number(cur.enabled) === 1);
+    const pat = cur && /Cycle/.test(cur.mode || '') ? 'cycle' : 'chase';
+    const html = '<div class="hb-form"><div id="t-st" class="hb-hint"></div>' +
+      (det.state === 'playing' ? '<div class="hb-warnbox">' + icon('alert', 16) + ' A playlist is playing on ' + esc(d.name) + '. The test pattern takes over the outputs until you stop it.</div>' : '') +
+      '<div class="hb-two"><label>Pattern<select id="t-pat" class="hb-sel"><option value="chase"' + (pat === 'chase' ? ' selected' : '') + '>Chase – red, green, blue</option><option value="cycle"' + (pat === 'cycle' ? ' selected' : '') + '>Cycle – all pixels red, green, blue</option></select></label>' +
+      '<label>Step time (ms)<input id="t-ms" type="number" min="100" max="10000" step="100" value="' + esc((cur && cur.cycleMS) || 1000) + '"></label></div>' +
+      '<label>Channels <small>(e.g. 1-1048576, or 1-510,1000-1500)</small><input id="t-ch" value="' + esc((cur && cur.channelSet) || '1-1048576') + '" autocomplete="off"></label>' +
+      '<p class="hb-hint">Uses FPP\'s built-in test mode. Remember to press <b>Stop test</b> when you are done.</p></div>';
+    const show = (m) => { m.body.querySelector('#t-st').innerHTML = on ? '<span class="hb-ok">● Test pattern is running</span>' : 'Test mode is off'; };
+    const run = async (m, enabled) => {
+      const q = (s) => m.body.querySelector(s);
+      try {
+        const r = await act(d, 'testmode_set', { enabled, preset: q('#t-pat').value, cycleMS: +q('#t-ms').value || 1000, channelSet: q('#t-ch').value.trim() });
+        if (r && r.ok) { on = enabled; show(m); }
+      } catch (e) { /* toast shown */ }
+      return false;
+    };
+    H.modal({ title: 'Test pattern – ' + d.name, html, onOpen: show,
+      buttons: [{ label: 'Close', cls: 'ghost' }, { label: 'Stop test', onClick: (m) => run(m, false) }, { label: 'Start test', cls: 'primary', onClick: (m) => run(m, true) }] });
+  }
 
   function deviceMenu(anchor, d) {
     Hub.menu(anchor, [

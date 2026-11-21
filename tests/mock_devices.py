@@ -46,6 +46,7 @@ def kasa_servers(ip):
 STATE = {'playing': False, 'vol': 70}
 import base64, time as _t
 LIDAR = {'cars': 37}
+TEST = {'mode': 'RGBChase', 'subMode': 'RGBChase-RGB', 'cycleMS': 1000, 'colorPattern': 'FF000000FF000000FF', 'enabled': 0, 'channelSet': '1-520', 'channelSetType': 'channelRange'}
 def board_csv(since):
     now = int(_t.time()); rows = ['Time,Devices detected,Adjusted']
     for i in range(12, 0, -1):
@@ -70,6 +71,8 @@ def make(ip):
                 if c.get('cmd') == 'adjust': LIDAR['cars'] = max(0, LIDAR['cars'] + c.get('delta', 1))
                 if c.get('cmd') == 'reset_today': LIDAR['cars'] = 0
                 return self.send('{"ok":true,"id":"abc"}')
+            if self.path == '/api/testmode':
+                TEST.update(json.loads(body)); return self.send('{"status":"OK"}')
             if self.path == '/api/system/volume': STATE['vol'] = json.loads(body)['volume']; return self.send('{"status":"OK"}')
             self.send('{}', code=404)
         def auth_ok(self):
@@ -87,9 +90,10 @@ def make(ip):
                     import urllib.parse as up
                     q = up.parse_qs(up.urlparse(p).query); return self.send(board_csv(int(q.get('from', ['0'])[0])), 'text/csv')
                 return self.send('<html><title>Baldrick Signals</title></html>', 'text/html')
-            if ip == '127.0.0.11':   # FPP
-                if p == '/api/system/info': return self.send(json.dumps({'HostName': 'MockFPP', 'Platform': 'Raspberry Pi', 'Variant': 'Pi 4', 'Version': '9.0', 'Branch': 'master', 'Mode': 'player', 'uuid': 'mock-uuid-1'}))
-                if p == '/api/fppd/status': return self.send(json.dumps({'fppd': 'running', 'mode_name': 'player', 'status_name': 'playing' if STATE['playing'] else 'idle', 'current_playlist': {'playlist': 'Main Show' if STATE['playing'] else ''}, 'current_sequence': 'jingle.fseq', 'seconds_played': 42, 'seconds_remaining': 118, 'volume': STATE['vol'], 'version': '9.0', 'branch': 'master', 'uptime': '2 days', 'sensors': [{'label': 'CPU', 'valueType': 'Temperature', 'value': 51.2}], 'warnings': [], 'scheduler': {'enabled': 1, 'nextPlaylist': {'playlistName': 'Main Show', 'scheduledStartTimeStr': 'Today @ 17:00'}}}))
+            if ip in ('127.0.0.11', '127.0.0.12'):   # FPP (.12 is in remote mode)
+                if p == '/api/system/info': return self.send(json.dumps({'HostName': 'MockFPP' if ip.endswith('.11') else 'RemoteFPP', 'Platform': 'Raspberry Pi', 'Variant': 'Pi 4', 'Version': '9.0', 'Branch': 'master', 'Mode': 'player', 'uuid': 'mock-uuid-' + ip[-2:]}))
+                if p == '/api/fppd/status': return self.send(json.dumps({'fppd': 'running', 'mode_name': 'player' if ip.endswith('.11') else 'remote', 'status_name': 'playing' if STATE['playing'] else 'idle', 'current_playlist': {'playlist': 'Main Show' if STATE['playing'] else ''}, 'current_sequence': 'jingle.fseq', 'seconds_played': 42, 'seconds_remaining': 118, 'volume': STATE['vol'], 'version': '9.0', 'branch': 'master', 'uptime': '2 days', 'sensors': [{'label': 'CPU', 'valueType': 'Temperature', 'value': 51.2}], 'warnings': [], 'scheduler': {'enabled': 1, 'nextPlaylist': {'playlistName': 'Main Show', 'scheduledStartTimeStr': 'Today @ 17:00'}}}))
+                if p == '/api/testmode': return self.send(json.dumps(TEST))
                 if p == '/api/playlists': return self.send('["Main Show","Kids Show"]')
                 if p.startswith('/api/playlist/') and '/start' in p: STATE['playing'] = True; return self.send('{"Status":"OK"}')
                 if p.startswith('/api/playlists/stop'): STATE['playing'] = False; return self.send('{"Status":"OK"}')
@@ -109,7 +113,7 @@ def make(ip):
     return H
 
 if __name__ == '__main__':
-    for ip in ['127.0.0.11', '127.0.0.31', '127.0.0.32', '127.0.0.33', '127.0.0.41', '127.0.0.42', '127.0.0.51', '127.0.0.52']:
+    for ip in ['127.0.0.11', '127.0.0.12', '127.0.0.31', '127.0.0.32', '127.0.0.33', '127.0.0.41', '127.0.0.42', '127.0.0.51', '127.0.0.52']:
         srv = ThreadingHTTPServer((ip, 80), make(ip)); threading.Thread(target=srv.serve_forever, daemon=True).start()
     for ip in KASA: kasa_servers(ip)
     print('mock devices up', flush=True)

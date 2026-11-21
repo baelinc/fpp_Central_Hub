@@ -216,7 +216,7 @@ try {
             $type = isset($in['type']) && isset($types[$kind][$in['type']]) ? $in['type'] : key($types[$kind]);
             $port = !empty($in['port']) ? (int) $in['port'] : ($type === 'kasa' ? 9999 : 80);
             $newId = HubStore::newId();
-            HubStore::mutate(function (&$c) use ($kind, $type, $ip, $port, $in, $newId) {
+            HubStore::mutate(function (&$c) use ($kind, $type, $ip, $port, $in, $newId, $types) {
                 foreach ($c['devices'] as $d) {
                     if ($d['kind'] === $kind && $d['ip'] === $ip && (int) $d['port'] === $port) {
                         throw new Exception('That device is already in the list');

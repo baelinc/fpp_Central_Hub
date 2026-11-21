@@ -8,7 +8,7 @@
  */
 class HubStore
 {
-    const VERSION = '1.0.2';
+    const VERSION = '1.1.0';
 
     public static function dir()
     {
@@ -18,6 +18,8 @@ class HubStore
             $d = $env;
         } elseif (!empty($settings['configDirectory'])) {
             $d = $settings['configDirectory'];
+        } elseif (is_dir('/home/fpp/media/config')) {
+            $d = '/home/fpp/media/config';
         } else {
             $d = dirname(__DIR__) . '/data';
         }
@@ -49,6 +51,9 @@ class HubStore
                 'compact' => false,
                 'autoScanOnLoad' => false,
                 'cycleSeconds' => 10,
+                'watchdogEnabled' => true,
+                'sshDefaultUser' => 'fpp',
+                'sshDefaultPass' => 'falcon',
             ),
             'devices' => array(),
             'ignored' => array(),
@@ -86,9 +91,87 @@ class HubStore
     private static function atomicWrite($file, $data)
     {
         $tmp = $file . '.tmp' . getmypid();
-        file_put_contents($tmp, $data);
-        @chmod($tmp, 0664);
-        rename($tmp, $file);
+        if (@file_put_contents($tmp, $data) === false) {
+            throw new Exception('Cannot write to ' . dirname($file) . ' (check permissions)');
+        }
+        @chmod($tmp, 0666); // web server and the monitor may run as different users; the file lives in FPP's private config dir
+        if (!@rename($tmp, $file)) {
+            throw new Exception('Cannot replace ' . $file);
+        }
+    }
+
+    /** Make PHP use the system time zone (CLI php.ini often leaves it at UTC). */
+    public static function applyTimezone()
+    {
+        global $settings;
+        $tz = '';
+        if (!empty($settings['TimeZone'])) {
+            $tz = $settings['TimeZone'];
+        } elseif (is_readable('/etc/timezone')) {
+            $tz = trim((string) @file_get_contents('/etc/timezone'));
+        }
+        if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
+            date_default_timezone_set($tz);
+        }
+    }
+
+    /** Config safe to send to the browser: no SSH passwords. */
+    public static function publicConfig(array $cfg)
+    {
+        foreach ($cfg['devices'] as $i => $d) {
+            if (isset($d['ssh'])) {
+                $cfg['devices'][$i]['ssh']['hasPass'] = !empty($d['ssh']['pass']);
+                unset($cfg['devices'][$i]['ssh']['pass']);
+            }
+        }
+        $cfg['options']['sshDefaultPassSet'] = !empty($cfg['options']['sshDefaultPass']);
+        unset($cfg['options']['sshDefaultPass']);
+        return $cfg;
+    }
+
+    /** Read-modify-write the shared state file (events, history) under a lock. */
+    public static function mutateState($fn)
+    {
+        $lock = fopen(self::file('slock'), 'c');
+        flock($lock, LOCK_EX);
+        try {
+            $s = self::state();
+            $ret = $fn($s);
+            self::saveState($s);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+        return $ret;
+    }
+
+    /** Watchdog/schedule bookkeeping, written only by the monitor. */
+    public static function watch()
+    {
+        $f = self::file('watch.json');
+        $w = is_file($f) ? json_decode((string) file_get_contents($f), true) : null;
+        return is_array($w) ? $w : array('dev' => array(), 'fired' => array());
+    }
+
+    public static function saveWatch($w)
+    {
+        self::atomicWrite(self::file('watch.json'), json_encode($w));
+    }
+
+    public static function runtimeFile($n)
+    {
+        return self::file($n);
+    }
+
+    public static function defaultWatch()
+    {
+        return array('enabled' => false, 'failAfter' => 120, 'bootGrace' => 180, 'cooldown' => 120, 'steps' => array('api', 'ssh', 'power'),
+            'frozen' => true, 'freezeSec' => 90, 'allowShared' => false);
+    }
+
+    public static function defaultSsh()
+    {
+        return array('enabled' => true, 'useDefault' => true, 'user' => '', 'pass' => '', 'port' => 22, 'command' => 'sudo reboot');
     }
 
     /** Read-modify-write under an exclusive lock. $fn receives the config by reference. */
@@ -214,6 +297,13 @@ class HubStore
             $added[] = $nd['id'];
         }
         return array($added, $updated);
+    }
+
+    public static function logEvent($level, $msg, $devId = null)
+    {
+        self::mutateState(function (&$s) use ($level, $msg, $devId) {
+            self::addEvent($s, $level, $msg, $devId);
+        });
     }
 
     public static function addEvent(array &$state, $level, $msg, $devId = null)

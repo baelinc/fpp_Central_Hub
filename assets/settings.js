@@ -8,7 +8,7 @@
     { k: 'controller', title: 'Lighting controllers', ico: 'cpu', hint: 'Kulp, Falcon / Baldrick, Experience Lights, Pixel2Things, Hanson Electronics, ESPixelStick (Forkineye), WLED.', ph: '192.168.80.0/24' },
     { k: 'plug', title: 'Smart plugs', ico: 'plug', hint: 'TP-Link Kasa (KP401 etc.), Tasmota and Shelly plugs – anything controlled locally, no cloud.', ph: '192.168.1.0/24' },
   ];
-  const NAV = [['net', 'Network ranges', 'search'], ['dev', 'Devices', 'list'], ['scn', 'Scenes', 'layers'], ['app', 'Appearance & behavior', 'sun'], ['kio', 'Kiosk & phone link', 'tv'], ['det', 'Detection rules', 'cpu'], ['bak', 'Backup & log', 'download'], ['upd', 'Updates', 'refresh']];
+  const NAV = [['net', 'Network ranges', 'search'], ['dev', 'Devices', 'list'], ['scn', 'Scenes', 'layers'], ['app', 'Appearance & behavior', 'sun'], ['kio', 'Kiosk & phone link', 'tv'], ['det', 'Detection rules', 'cpu'], ['bak', 'Backup & log', 'download'], ['rec', 'Auto-recovery', 'zap'], ['upd', 'Updates', 'refresh']];
   const S = { cfg: null, types: {}, boot: null, tab: 'net', dirty: false, status: {} };
   const $ = (s, r) => (r || root).querySelector(s);
   const abs = (rel) => new URL(rel, location.href).href;
@@ -68,7 +68,12 @@
 
     panes.push(pane('bak', '<h3>Backup & log</h3><span class="hb-hint">Export all devices, ranges, scenes and settings as a file, or restore from one.</span><div class="hb-row" style="flex-wrap:wrap"><button class="hb-btn" data-export>' + icon('download', 16) + ' Export</button><label class="hb-btn" style="cursor:pointer">' + icon('upload', 16) + ' Import<input type="file" id="b-file" accept="application/json" hidden></label><button class="hb-btn danger" data-clearlog>Clear activity log</button></div>'));
 
-    panes.push(pane('upd', '<h3>Updates</h3><span class="hb-hint">Installed version <b>v' + esc(B.version) + '</b>. Checks github.com/baelinc/fpp_Central_Hub (the FPP needs internet access). FPP\'s Plugin Manager can also update this plugin.</span><div class="hb-row"><button class="hb-btn" id="u-check">' + icon('refresh', 16) + ' Check for updates</button><button class="hb-btn primary" id="u-apply" hidden>Update now</button></div><p class="hb-hint" id="u-msg" style="margin-top:10px"></p>'));
+    panes.push(pane('rec', '<h3>Auto-recovery</h3><span class="hb-hint">A background monitor watches the devices you enable it for (open a device → Edit → Auto-recovery). When one stops responding it escalates: <b>1)</b> FPP API restart → <b>2)</b> SSH command → <b>3)</b> power-cycle its smart plug. It only acts while the device is supposed to be powered (inside the plug\'s schedule, or while the plug is on), never power-cycles a plug that also feeds other devices unless you allow it, and limits power cycles per day.</span><div class="hb-form">' +
+      '<label class="hb-chk"><input type="checkbox" id="o-wd"' + (o.watchdogEnabled ? ' checked' : '') + '> Auto-recovery master switch</label>' +
+      '<div class="hb-two"><label>Default SSH username<input id="o-su" value="' + esc(o.sshDefaultUser) + '" autocomplete="off"></label><label>Default SSH password<input id="o-sp" type="password" placeholder="' + (o.sshDefaultPassSet ? '•••••• (saved – leave blank to keep)' : 'password') + '" autocomplete="new-password"></label></div>' +
+      '<p class="hb-hint">FPP\'s factory login is <span class="hb-mono">fpp</span> / <span class="hb-mono">falcon</span>. Devices set to “use default” use this login.</p>' +
+      '<div class="hb-fs"><h4>Background monitor</h4><div id="mon-st" class="hb-hint">Checking…</div><div class="hb-row" style="margin-top:8px"><button class="hb-btn sm" data-mon="start">Start</button><button class="hb-btn sm" data-mon="restart">Restart</button><button class="hb-btn sm" data-mon="stop">Stop</button></div><p class="hb-hint">Starts automatically with FPP and whenever the dashboard is open. It also runs your <b>plug schedules</b>. Recovery actions appear in the Activity log.</p></div></div>' + saveBar('rec')));
+    panes.push(pane('upd', '<h3>Updates</h3><span class="hb-hint">Created by Johnathan Evans · installed version <b>v' + esc(B.version) + '</b>. Checks github.com/baelinc/fpp_Central_Hub (the FPP needs internet access). FPP\'s Plugin Manager can also update this plugin.</span><div class="hb-row"><button class="hb-btn" id="u-check">' + icon('refresh', 16) + ' Check for updates</button><button class="hb-btn primary" id="u-apply" hidden>Update now</button></div><p class="hb-hint" id="u-msg" style="margin-top:10px"></p>'));
     $('#hb-panes').innerHTML = panes.join('');
     $('#o-theme').value = o.theme;
     $('#d-sig').value = JSON.stringify(S.cfg.signatures || S.boot.defaultSignatures, null, 1);
@@ -104,7 +109,7 @@
     const options = {
       theme: $('#o-theme').value, accent: $('#o-accent').value, refreshSeconds: +$('#o-refresh').value, cycleSeconds: +$('#o-cycle').value,
       connectTimeoutMs: +$('#o-ct').value, httpTimeoutMs: +$('#o-ht').value, showOffline: $('#o-off').checked, compact: $('#o-compact').checked,
-      autoScanOnLoad: $('#o-auto').checked, kioskTitle: $('#o-ktitle').value, kioskReadOnly: $('#o-kro').checked,
+      autoScanOnLoad: $('#o-auto').checked, watchdogEnabled: $('#o-wd').checked, sshDefaultUser: $('#o-su').value, sshDefaultPass: $('#o-sp').value, kioskTitle: $('#o-ktitle').value, kioskReadOnly: $('#o-kro').checked,
     };
     const sig = parseSig();
     if (sig instanceof Error) throw new Error('Detection rules: ' + sig.message);
@@ -151,6 +156,9 @@
       e.target.value = '';
     });
     $('[data-clearlog]').addEventListener('click', async () => { await H.api('events_clear', {}); H.toast('Log cleared', 'ok'); });
+    const monRefresh = async () => { try { const m = await H.api('monitor_status'); $('#mon-st').innerHTML = (m.running ? '<span class="hb-ok">● Running</span> (last check ' + H.ago(m.heartbeat) + ' ago)' : '<span class="hb-bad">● Not running</span>') + ' · ssh client: ' + (m.ssh ? 'available' : '<span class="hb-bad">not installed – step 2 unavailable</span>') + (m.lastError ? '<br><span class="hb-bad">' + esc(m.lastError) + '</span>' : ''); } catch (e) { $('#mon-st').textContent = e.message; } };
+    root.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', async () => { b.disabled = true; try { await H.api('monitor_ctl', { op: b.dataset.mon }); } catch (e) { H.toast(e.message, 'err'); } b.disabled = false; monRefresh(); }));
+    monRefresh();
     kioskUrl();
     let latest = null;
     $('#u-check').addEventListener('click', async () => {

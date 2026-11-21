@@ -536,6 +536,10 @@ class HubDrivers
                 $r = HubNet::http($b . '/json/state', 'POST', '{"on":"t"}', 4000, array('Content-Type: application/json'));
                 return array($r['code'] == 200, $r['code'] == 200 ? 'Toggled' : 'WLED did not respond', null);
             }
+            if ($cmd === 'reboot') {
+                $r = HubNet::http($b . '/json/state', 'POST', '{"rb":true}', 4000, array('Content-Type: application/json'));
+                return array($r['code'] == 200, $r['code'] == 200 ? 'Rebooting' : 'WLED did not respond', null);
+            }
             if ($cmd === 'brightness') {
                 $v = max(1, min(255, (int) (isset($args['value']) ? $args['value'] : 128)));
                 $r = HubNet::http($b . '/json/state', 'POST', json_encode(array('bri' => $v)), 4000, array('Content-Type: application/json'));

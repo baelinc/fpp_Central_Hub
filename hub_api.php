@@ -4,7 +4,7 @@
  * Reached through FPP's plugin loader so it works both inside FPP and standalone:
  *   plugin.php?plugin=fpp_Central_Hub&page=hub_api.php&nopage=1&action=...
  */
-require_once __DIR__ . '/lib/Drivers.php';
+require_once __DIR__ . '/lib/Monitor.php';
 
 function hub_out($data, $code = 200)
 {
@@ -42,48 +42,14 @@ function hub_ensure_local(array &$cfg)
     return true;
 }
 
-/** Track online/offline transitions, latency history and the event log. Returns statuses decorated with since/hist. */
-function hub_record(array $cfg, array $statuses)
-{
-    $state = HubStore::state();
-    $now = time();
-    $names = array();
-    foreach ($cfg['devices'] as $d) {
-        $names[$d['id']] = $d['name'];
-    }
-    foreach ($statuses as $id => $st) {
-        $prev = isset($state['dev'][$id]) ? $state['dev'][$id] : null;
-        $online = !empty($st['online']);
-        if (!$prev) {
-            $prev = array('online' => $online, 'since' => $now, 'hist' => array());
-        } elseif ((bool) $prev['online'] !== $online) {
-            HubStore::addEvent($state, $online ? 'ok' : 'warn', $names[$id] . ($online ? ' is back online' : ' went offline'), $id);
-            $prev['online'] = $online;
-            $prev['since'] = $now;
-        }
-        if ($online && isset($st['ms']) && $st['ms'] !== null) {
-            $prev['hist'][] = (int) $st['ms'];
-            $prev['hist'] = array_slice($prev['hist'], -30);
-        }
-        $state['dev'][$id] = $prev;
-        $statuses[$id]['since'] = $prev['since'];
-        $statuses[$id]['hist'] = $prev['hist'];
-    }
-    // forget devices that no longer exist
-    foreach (array_keys($state['dev']) as $id) {
-        if (!isset($names[$id])) {
-            unset($state['dev'][$id]);
-        }
-    }
-    HubStore::saveState($state);
-    return $statuses;
-}
-
 function hub_log($msg, $level = 'info', $devId = null)
 {
-    $state = HubStore::state();
-    HubStore::addEvent($state, $level, $msg, $devId);
-    HubStore::saveState($state);
+    HubStore::logEvent($level, $msg, $devId);
+}
+
+function hub_pub($cfg)
+{
+    return HubStore::publicConfig($cfg);
 }
 
 function hub_validate_ranges(array $ranges)
@@ -165,15 +131,28 @@ try {
                 $cfg = HubStore::load();
             }
             hub_out(array(
-                'ok' => true, 'config' => $cfg, 'types' => HubDrivers::types(), 'defaultSignatures' => HubDrivers::defaultSignatures(),
+                'ok' => true, 'config' => hub_pub($cfg), 'types' => HubDrivers::types(), 'defaultSignatures' => HubDrivers::defaultSignatures(),
                 'localSubnets' => HubNet::localSubnets(), 'localIp' => HubNet::localIp(), 'version' => HubStore::VERSION,
             ));
 
         case 'status':
             $ids = isset($_GET['ids']) && $_GET['ids'] !== '' ? explode(',', (string) $_GET['ids']) : null;
             $st = HubDrivers::statusAll($cfg, $ids);
-            $st = hub_record($cfg, $st);
-            hub_out(array('ok' => true, 'status' => $st, 'ts' => time()));
+            $st = HubMonitor::record($cfg, $st);
+            HubStore::applyTimezone();
+            $w = HubStore::watch();
+            $watch = array();
+            foreach ($cfg['devices'] as $d) {
+                if ($d['kind'] === 'plug' && !empty($d['schedules'])) {
+                    $watch[$d['id']] = array('window' => HubSchedule::plugWindow($d, time()));
+                }
+                if (isset($w['dev'][$d['id']]) && !empty($d['watch']['enabled'])) {
+                    $x = $w['dev'][$d['id']];
+                    $watch[$d['id']] = array('state' => $x['state'], 'step' => $x['step'], 'msg' => $x['msg'], 'msgT' => $x['msgT']);
+                }
+            }
+            HubMonitor::ensureRunning($cfg);
+            hub_out(array('ok' => true, 'status' => $st, 'watch' => $watch, 'monitor' => HubMonitor::running(), 'ts' => time()));
 
         case 'scan':
             $kind = isset($in['kind']) ? $in['kind'] : '';
@@ -193,15 +172,13 @@ try {
                 $c['lastScan'][$kind] = array('t' => time(), 'found' => count($res['found']), 'added' => count($added), 'scanned' => $res['scanned']);
                 $report = array('added' => $added, 'updated' => $updated);
             });
-            $state = HubStore::state();
             $c2 = HubStore::load();
             foreach ($report['added'] as $id) {
                 $dv = HubStore::find($c2, $id);
-                HubStore::addEvent($state, 'ok', 'Discovered ' . $dv['name'] . ' (' . $dv['ip'] . ')', $id);
+                HubStore::logEvent('ok', 'Discovered ' . $dv['name'] . ' (' . $dv['ip'] . ')', $id);
             }
-            HubStore::saveState($state);
             hub_out(array('ok' => true, 'scanned' => $res['scanned'], 'found' => count($res['found']), 'added' => $report['added'],
-                'updated' => $report['updated'], 'unmatched' => $res['unmatched'], 'config' => $c2));
+                'updated' => $report['updated'], 'unmatched' => $res['unmatched'], 'config' => hub_pub($c2)));
 
         case 'probe':
             $kind = isset($in['kind']) ? $in['kind'] : '';
@@ -239,7 +216,7 @@ try {
                 );
             });
             hub_log('Added ' . $ip . ' manually', 'info', $newId);
-            hub_out(array('ok' => true, 'id' => $newId, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'id' => $newId, 'config' => hub_pub(HubStore::load())));
 
         case 'device_update':
             $id = isset($in['id']) ? $in['id'] : '';
@@ -275,6 +252,52 @@ try {
                     if (isset($patch['type']) && isset($types[$d['kind']][$patch['type']])) {
                         $d['type'] = $patch['type'];
                     }
+                    if (isset($patch['watch']) && is_array($patch['watch'])) {
+                        $w = array_replace(HubStore::defaultWatch(), isset($d['watch']) ? $d['watch'] : array());
+                        $pw = $patch['watch'];
+                        foreach (array('failAfter' => array(30, 3600), 'bootGrace' => array(0, 1800), 'cooldown' => array(30, 1800), 'freezeSec' => array(30, 1800), 'maxCycles' => array(1, 20)) as $k => $lim) {
+                            if (isset($pw[$k])) {
+                                $w[$k] = max($lim[0], min($lim[1], (int) $pw[$k]));
+                            }
+                        }
+                        foreach (array('enabled', 'frozen', 'allowShared') as $k) {
+                            if (isset($pw[$k])) {
+                                $w[$k] = (bool) $pw[$k];
+                            }
+                        }
+                        if (isset($pw['steps']) && is_array($pw['steps'])) {
+                            $w['steps'] = array_values(array_intersect(array('api', 'ssh', 'power'), $pw['steps']));
+                        }
+                        $d['watch'] = $w;
+                    }
+                    if (isset($patch['ssh']) && is_array($patch['ssh'])) {
+                        $x = array_replace(HubStore::defaultSsh(), isset($d['ssh']) ? $d['ssh'] : array());
+                        $ps = $patch['ssh'];
+                        foreach (array('enabled', 'useDefault') as $k) {
+                            if (isset($ps[$k])) {
+                                $x[$k] = (bool) $ps[$k];
+                            }
+                        }
+                        if (isset($ps['user'])) {
+                            $x['user'] = preg_replace('/[^A-Za-z0-9._-]/', '', (string) $ps['user']);
+                        }
+                        if (isset($ps['pass']) && $ps['pass'] !== '') {
+                            $x['pass'] = (string) $ps['pass'];
+                        }
+                        if (!empty($ps['clearPass'])) {
+                            $x['pass'] = '';
+                        }
+                        if (isset($ps['port'])) {
+                            $x['port'] = max(1, min(65535, (int) $ps['port']));
+                        }
+                        if (isset($ps['command'])) {
+                            $x['command'] = hub_substr(trim((string) $ps['command']), 0, 200);
+                        }
+                        $d['ssh'] = $x;
+                    }
+                    if (array_key_exists('schedules', $patch) && $d['kind'] === 'plug') {
+                        $d['schedules'] = HubSchedule::clean($patch['schedules']);
+                    }
                     if (array_key_exists('linkedPlug', $patch)) {
                         $lp = $patch['linkedPlug'];
                         if (is_array($lp) && !empty($lp['id'])) {
@@ -287,7 +310,7 @@ try {
                 }
                 throw new Exception('Device not found');
             });
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         case 'device_remove':
             $id = isset($in['id']) ? $in['id'] : '';
@@ -319,7 +342,7 @@ try {
                 unset($sc);
             });
             hub_log('Removed ' . $name, 'info');
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         case 'act':
             $id = isset($in['id']) ? $in['id'] : '';
@@ -364,7 +387,7 @@ try {
                         $o[$k] = max($lim[0], min($lim[1], (int) $opts[$k]));
                     }
                 }
-                foreach (array('kioskReadOnly', 'showOffline', 'compact', 'autoScanOnLoad') as $k) {
+                foreach (array('kioskReadOnly', 'showOffline', 'compact', 'autoScanOnLoad', 'watchdogEnabled') as $k) {
                     if (isset($opts[$k])) {
                         $o[$k] = (bool) $opts[$k];
                     }
@@ -375,6 +398,12 @@ try {
                 if (isset($opts['accent']) && preg_match('/^#[0-9a-fA-F]{6}$/', $opts['accent'])) {
                     $o['accent'] = $opts['accent'];
                 }
+                if (isset($opts['sshDefaultUser'])) {
+                    $o['sshDefaultUser'] = preg_replace('/[^A-Za-z0-9._-]/', '', (string) $opts['sshDefaultUser']);
+                }
+                if (isset($opts['sshDefaultPass']) && $opts['sshDefaultPass'] !== '') {
+                    $o['sshDefaultPass'] = (string) $opts['sshDefaultPass'];
+                }
                 if (isset($opts['kioskTitle'])) {
                     $o['kioskTitle'] = hub_substr(trim($opts['kioskTitle']), 0, 60);
                 }
@@ -382,7 +411,7 @@ try {
                     $c['signatures'] = is_array($sigs) && $sigs ? $sigs : null;
                 }
             });
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         case 'parse_ranges':
             $res = array();
@@ -422,7 +451,7 @@ try {
                 }
                 $c['scenes'][] = $scene;
             });
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         case 'scene_delete':
             $id = isset($in['id']) ? $in['id'] : '';
@@ -431,7 +460,7 @@ try {
                     return $s['id'] !== $id;
                 }));
             });
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         case 'update_check':
             $state = HubStore::state();
@@ -442,8 +471,9 @@ try {
                 $latest = trim($r['body']);
                 if ($r['code'] === 200 && preg_match('/^\d+\.\d+\.\d+$/', $latest)) {
                     $u = array('t' => time(), 'latest' => $latest);
-                    $state['update'] = $u;
-                    HubStore::saveState($state);
+                    HubStore::mutateState(function (&$st2) use ($u) {
+                        $st2['update'] = $u;
+                    });
                 } else {
                     hub_out(array('ok' => true, 'current' => HubStore::VERSION, 'latest' => null, 'available' => false, 'error' => 'Could not reach GitHub (does this device have internet access?)'));
                 }
@@ -458,25 +488,52 @@ try {
             }
             $cmd = 'cd ' . escapeshellarg($dir) . ' && HOME=' . escapeshellarg(HubStore::dir()) . ' git -c safe.directory=' . escapeshellarg($dir) . ' pull --ff-only 2>&1';
             $out = (string) shell_exec($cmd);
-            $state = HubStore::state();
-            unset($state['update']);
-            HubStore::addEvent($state, 'info', 'Update requested: ' . substr(trim($out), -120));
-            HubStore::saveState($state);
+            HubStore::mutateState(function (&$st2) use ($out) {
+                unset($st2['update']);
+                HubStore::addEvent($st2, 'info', 'Update requested: ' . substr(trim($out), -120));
+            });
+            HubMonitor::stop();
             $ok = stripos($out, 'fatal') === false && stripos($out, 'error') === false;
             hub_out(array('ok' => $ok, 'output' => $out, 'error' => $ok ? null : 'Update failed: ' . trim($out)));
+
+        case 'monitor_status':
+            $m = array('ok' => true, 'running' => HubMonitor::running(), 'heartbeat' => HubMonitor::heartbeat(), 'ssh' => HubSsh::available());
+            $ef = HubStore::runtimeFile('monitor.err');
+            $m['lastError'] = is_file($ef) ? trim(implode('', array_slice(file($ef), -1))) : '';
+            hub_out($m);
+
+        case 'monitor_ctl':
+            $op = isset($in['op']) ? $in['op'] : '';
+            if ($op === 'stop' || $op === 'restart') {
+                HubMonitor::stop();
+            }
+            if ($op === 'start' || $op === 'restart') {
+                HubMonitor::start();
+            }
+            hub_out(array('ok' => true, 'running' => HubMonitor::running()));
+
+        case 'ssh_test':
+            $d = HubStore::find($cfg, isset($in['id']) ? $in['id'] : '');
+            if (!$d) {
+                hub_fail('Device not found', 404);
+            }
+            $s = isset($d['ssh']) ? $d['ssh'] : HubStore::defaultSsh();
+            list($u, $p) = HubSsh::creds($cfg, $d);
+            list($ok, $out) = HubSsh::run(HubDrivers::host($d), (int) ($s['port'] ?: 22), $u, $p, 'echo hub-ssh-ok', 15);
+            hub_out(array('ok' => $ok && strpos($out, 'hub-ssh-ok') !== false, 'msg' => $out, 'error' => $ok ? null : 'SSH failed: ' . $out, 'user' => $u));
 
         case 'events':
             $s = HubStore::state();
             hub_out(array('ok' => true, 'events' => array_reverse(array_slice($s['events'], -100))));
 
         case 'events_clear':
-            $s = HubStore::state();
-            $s['events'] = array();
-            HubStore::saveState($s);
+            HubStore::mutateState(function (&$s) {
+                $s['events'] = array();
+            });
             hub_out(array('ok' => true));
 
         case 'export':
-            hub_out(array('ok' => true, 'config' => $cfg));
+            hub_out(array('ok' => true, 'config' => hub_pub($cfg)));
 
         case 'import':
             $n = isset($in['config']) && is_array($in['config']) ? $in['config'] : null;
@@ -490,7 +547,7 @@ try {
                     }
                 }
             });
-            hub_out(array('ok' => true, 'config' => HubStore::load()));
+            hub_out(array('ok' => true, 'config' => hub_pub(HubStore::load())));
 
         default:
             hub_fail('Unknown action', 404);

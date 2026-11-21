@@ -9,7 +9,7 @@
     { k: 'plug', title: 'Smart Plugs', one: 'Smart plug', ico: 'plug' },
   ];
   const FPP_PAGES = [['Status', 'index.php', 'pulse'], ['Playlists', 'playlists.php', 'list'], ['Schedule', 'scheduler.php', 'sun'], ['File manager', 'filemanager.php', 'download'], ['Channel outputs', 'channeloutputs.php', 'zap'], ['Test patterns', 'testing.php', 'zap'], ['Settings', 'settings.php', 'gear']];
-  const S = { cfg: null, types: {}, status: {}, recv: {}, tab: B.kind || 'all', group: '', q: '', sel: new Set(), selMode: false, playlists: {}, drag: new Set(), polling: false, ro: false, timer: null, sigCfg: '', acted: {} };
+  const S = { cfg: null, types: {}, status: {}, recv: {}, tab: B.kind || 'all', group: '', q: '', sel: new Set(), selMode: false, playlists: {}, drag: new Set(), polling: false, ro: false, timer: null, sigCfg: '', acted: {}, watch: {}, monitor: null };
 
   const dev = (id) => S.cfg.devices.find((d) => d.id === id);
   const typeLabel = (d) => ((S.types[d.kind] || {})[d.type] || {}).label || d.type;
@@ -169,6 +169,15 @@
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><span>latency · max ' + max + ' ms</span>';
   }
   const chip = (label, val, cls) => '<span class="hb-chip ' + (cls || '') + '"><i>' + esc(label) + '</i>' + esc(val) + '</span>';
+  const fmtT = (t) => { const [h, m] = t.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? 'a' : 'p'); };
+  function watchChips(d, chips) {
+    if (!d.watch || !d.watch.enabled) return;
+    const w = S.watch[d.id];
+    const lbl = { ok: 'watching', down: 'not responding…', recovering: 'recovering', exhausted: 'recovery failed', 'off-expected': 'plug off (expected)' };
+    const st = w && w.state ? w.state : 'ok';
+    chips.push(chip('Watchdog', lbl[st] || st, st === 'exhausted' ? 'bad' : st === 'recovering' || st === 'down' ? 'warn' : ''));
+    if (w && w.msg && (st === 'recovering' || st === 'exhausted')) chips.push(chip('Last step', w.msg.slice(0, 70) + ' · ' + H.ago(w.msgT) + ' ago', st === 'exhausted' ? 'bad' : 'warn'));
+  }
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 
   function linkedRow(d) {
@@ -224,6 +233,7 @@
         if (det.warnings) chips.push(chip('Warnings', det.warnings, 'warn'));
         if (st.ms != null) chips.push(chip('Ping', st.ms + ' ms'));
       }
+      watchChips(d, chips);
       card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
       if (online && det.fppd !== false) ensurePlaylists(d, card);
     } else if (d.kind === 'controller') {
@@ -239,6 +249,7 @@
         if (det.rssi != null) chips.push(chip('Wi-Fi', det.rssi + ' dBm'));
       }
       if (d.model) chips.push(chip('Model', d.model));
+      watchChips(d, chips);
       card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
       const w = card.querySelector('[data-b="wled"]'); if (w) w.hidden = !(d.type === 'wled' && online);
     } else {
@@ -253,6 +264,7 @@
         if (det.rssi != null) chips.push(chip('Wi-Fi', det.rssi < 0 ? det.rssi + ' dBm' : det.rssi + '%'));
         if (st.ms != null) chips.push(chip('Ping', st.ms + ' ms'));
       }
+      (d.schedules || []).forEach((sc) => chips.push(chip('Schedule', fmtT(sc.on) + '–' + fmtT(sc.off) + (sc.enforce ? '' : ' (watch only)'), (S.watch[d.id] && S.watch[d.id].window) ? '' : '')));
       card.querySelector('[data-b="chips"]').innerHTML = chips.join('');
       const users = S.cfg.devices.filter((x) => x.linkedPlug && x.linkedPlug.id === d.id);
       card.querySelector('[data-b="powers"]').innerHTML = users.length ? '<span class="hb-lbl">Powers</span> ' + users.map((u) => '<span class="hb-pill">' + esc(u.name) + '</span>').join('') : '';
@@ -311,6 +323,7 @@
     try {
       const r = await H.api('status');
       const now = Date.now();
+      S.watch = r.watch || {}; S.monitor = r.monitor;
       Object.keys(r.status).forEach((id) => { if ((S.acted[id] || 0) > t0) return; S.status[id] = r.status[id]; S.recv[id] = now; });
       S.connErr = false;
       patchAll();
@@ -451,7 +464,8 @@
     const lp = d.linkedPlug, p = lp && dev(lp.id);
     if (!p) return H.toast('No plug is linked to this device', 'err');
     const secs = +opt('cycleSeconds') || 10;
-    if (!(await H.confirm('Cut power to ' + d.name + ' via "' + p.name + '" for ' + secs + ' seconds, then restore it?', 'Power cycle', true))) return;
+    const others = S.cfg.devices.filter((x) => x.id !== d.id && x.linkedPlug && x.linkedPlug.id === p.id && (x.linkedPlug.outlet === '*' || lp.outlet === '*' || x.linkedPlug.outlet === lp.outlet));
+    if (!(await H.confirm('Cut power to ' + d.name + ' via "' + p.name + '" for ' + secs + ' seconds, then restore it?' + (others.length ? ' WARNING: this plug also powers ' + others.map((o) => o.name).join(', ') + ', which will lose power too.' : ''), 'Power cycle', true))) return;
     const t = H.toast('Powering off ' + d.name + '…', 'info');
     try {
       await act(p, 'off', { outlet: lp.outlet || '*' }, { quiet: true });
@@ -639,9 +653,9 @@
       '<div class="hb-two"><label>Type<select id="hb-et" class="hb-sel">' + typeOptions(d.kind, d.type) + '</select></label><label>Group<input id="hb-eg" value="' + esc(d.group || '') + '" list="hb-glist"></label></div>' +
       '<datalist id="hb-glist">' + [...new Set(S.cfg.devices.map((x) => x.group).filter(Boolean))].map((g) => '<option value="' + esc(g) + '">').join('') + '</datalist>' +
       (d.kind !== 'plug' ? '<div class="hb-two"><label>Powered by plug <small>(enables Power cycle)</small><select id="hb-elp" class="hb-sel"><option value="">— none —</option>' + plugs.map((p) => '<option value="' + esc(p.id) + '"' + (p.id === lp.id ? ' selected' : '') + '>' + esc(p.name) + ' (' + esc(p.ip) + ')</option>').join('') + '</select></label><label>Outlet<select id="hb-elo" class="hb-sel"></select></label></div>' : '') +
-      '<label>Notes<textarea id="hb-eno" rows="2">' + esc(d.notes || '') + '</textarea></label></div>';
+      '<label>Notes<textarea id="hb-eno" rows="2">' + esc(d.notes || '') + '</textarea></label>' + extraSections(d) + '</div>';
     H.modal({
-      title: 'Edit ' + d.name, html,
+      title: 'Edit ' + d.name, html, wide: true,
       onOpen(m) {
         const $ = (s) => m.body.querySelector(s);
         const fillOutlets = () => {
@@ -652,17 +666,94 @@
           sel.value = lp.outlet && lp.id === pid ? lp.outlet : '*';
         };
         if ($('#hb-elp')) { $('#hb-elp').addEventListener('change', fillOutlets); fillOutlets(); }
+        wireExtra(m, d);
       },
       buttons: [{ label: 'Cancel', cls: 'ghost' }, { label: 'Remove', cls: 'danger', onClick: (m) => { setTimeout(() => removeDevice(d), 250); } }, {
         label: 'Save', cls: 'primary', onClick: async (m) => {
           const $ = (s) => m.body.querySelector(s);
           const patch = { name: $('#hb-en').value, ip: $('#hb-eip').value, port: +$('#hb-ep').value || 80, type: $('#hb-et').value, group: $('#hb-eg').value, notes: $('#hb-eno').value };
           if ($('#hb-elp')) patch.linkedPlug = $('#hb-elp').value ? { id: $('#hb-elp').value, outlet: $('#hb-elo').value || '*' } : null;
+          Object.assign(patch, collectExtra(m, d));
           const r = await H.api('device_update', { id: d.id, patch });
           S.cfg = r.config; S.sigCfg = ''; renderAll(); poll();
         },
       }],
     });
+  }
+
+  /* ---- recovery watchdog / SSH / plug schedule sections of the edit dialog ---- */
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function sharedWith(d) {
+    const lp = d.linkedPlug;
+    if (!lp || !lp.id) return [];
+    return S.cfg.devices.filter((x) => x.id !== d.id && x.linkedPlug && x.linkedPlug.id === lp.id);
+  }
+  function schedRow(sc) {
+    sc = sc || { days: [1, 2, 3, 4, 5, 6, 0], on: '17:15', off: '23:00', enforce: true };
+    return '<div class="hb-stepbox" data-sched><span class="hb-days">' + DAYS.map((n, i) => '<label class="hb-day"><input type="checkbox" data-day="' + i + '"' + (sc.days.indexOf(i) >= 0 ? ' checked' : '') + '><span>' + n.slice(0, 2) + '</span></label>').join('') + '</span>' +
+      '<span class="hb-hint">on</span><input type="time" data-on value="' + esc(sc.on) + '" style="width:110px!important"><span class="hb-hint">off</span><input type="time" data-off value="' + esc(sc.off) + '" style="width:110px!important">' +
+      '<label class="hb-chk" title="When on, the Hub switches the plug at these times. When off, the schedule only tells the watchdog when the plug is supposed to be on (use this if FPP or the Kasa app already switches it)."><input type="checkbox" data-enf' + (sc.enforce ? ' checked' : '') + '> Switch plug automatically</label><button class="hb-ib" data-rmsched title="Remove">' + icon('x', 14) + '</button></div>';
+  }
+  function extraSections(d) {
+    if (d.kind === 'plug') {
+      const users = S.cfg.devices.filter((x) => x.linkedPlug && x.linkedPlug.id === d.id);
+      return '<details class="hb-fs" open><summary class="hb-sum">Schedule <small>(when this plug is supposed to be on)</small></summary><div id="hb-sched">' + (d.schedules || []).map(schedRow).join('') + '</div><button class="hb-btn sm" id="hb-addsched" type="button">' + icon('plus', 12) + ' Add schedule</button>' +
+        '<p class="hb-hint">The recovery watchdog only restarts or power-cycles devices on this plug <b>inside</b> these windows (they are expected to be off outside them). Overnight windows (on 17:15, off 01:00) are supported.' + (users.length ? ' This plug powers: <b>' + users.map((u) => esc(u.name)).join(', ') + '</b>.' : '') + '</p></details>';
+    }
+    if (d.local) return '';
+    const w = Object.assign({ enabled: false, failAfter: 120, bootGrace: 180, cooldown: 120, steps: ['api', 'ssh', 'power'], frozen: true, freezeSec: 90, allowShared: false, maxCycles: 3 }, d.watch || {});
+    const ss = Object.assign({ enabled: true, useDefault: true, user: '', port: 22, command: 'sudo reboot', hasPass: false }, d.ssh || {});
+    const sh = sharedWith(d);
+    const ck = (id, v, label, extra) => '<label class="hb-chk"><input type="checkbox" id="' + id + '"' + (v ? ' checked' : '') + '> ' + label + '</label>';
+    return '<details class="hb-fs"' + (w.enabled ? ' open' : '') + '><summary class="hb-sum">Auto-recovery <small>(runs in the background, even when this page is closed)</small></summary><div class="hb-form">' +
+      ck('w-en', w.enabled, 'Watch this device and try to fix it if it stops responding') +
+      '<div><span class="hb-lbl">Steps, in order</span><div class="hb-row" style="flex-wrap:wrap;margin-top:6px">' +
+      ck('w-api', w.steps.indexOf('api') >= 0, '1 · ' + (d.kind === 'fpp' ? 'FPP API: restart FPPD' : 'Restart over its API (WLED only)')) +
+      ck('w-ssh', w.steps.indexOf('ssh') >= 0, '2 · SSH command') + ck('w-pow', w.steps.indexOf('power') >= 0, '3 · Power-cycle the linked plug') + '</div></div>' +
+      (sh.length ? '<div class="hb-warnbox">' + icon('alert', 16) + ' The linked plug also powers <b>' + sh.map((x) => esc(x.name)).join(', ') + '</b>. Step 3 will be skipped unless you allow it below.</div>' + ck('w-shared', w.allowShared, 'Allow power-cycling even though it also cuts power to the devices above') : '') +
+      '<div class="hb-two"><label>Not responding for (seconds) before acting<input id="w-fail" type="number" min="30" max="3600" value="' + w.failAfter + '"></label><label>Ignore failures after power-on (boot grace, seconds)<input id="w-boot" type="number" min="0" max="1800" value="' + w.bootGrace + '"></label></div>' +
+      '<div class="hb-two"><label>Wait between steps (seconds)<input id="w-cool" type="number" min="30" max="1800" value="' + w.cooldown + '"></label><label>Max power cycles per 24 h<input id="w-max" type="number" min="1" max="20" value="' + w.maxCycles + '"></label></div>' +
+      (d.kind === 'fpp' ? ck('w-froz', w.frozen, 'Also treat it as unresponsive if a playlist is “playing” but the time stops advancing') + '<label>…for at least (seconds)<input id="w-fsec" type="number" min="30" max="1800" value="' + w.freezeSec + '"></label>' : '') +
+      '<h4 class="hb-h4" style="margin:6px 0 0">SSH (step 2)</h4>' + ck('s-en', ss.enabled, 'Allow SSH recovery for this device') + ck('s-def', ss.useDefault, 'Use the default SSH login (set in Settings → Auto-recovery; FPP default is fpp / falcon)') +
+      '<div class="hb-two" id="s-cust"><label>SSH username<input id="s-user" value="' + esc(ss.user) + '" autocomplete="off"></label><label>SSH password<input id="s-pass" type="password" placeholder="' + (ss.hasPass ? '•••••• (saved – leave blank to keep)' : 'password') + '" autocomplete="new-password"></label></div>' +
+      '<div class="hb-two"><label>SSH port<input id="s-port" type="number" min="1" max="65535" value="' + ss.port + '"></label><label>Command<input id="s-cmd" value="' + esc(ss.command) + '"></label></div>' +
+      '<div class="hb-row"><button class="hb-btn sm" id="s-test" type="button">Test SSH login</button><span class="hb-hint" id="s-res"></span></div>' +
+      '<p class="hb-hint">Passwords are stored in plain text in FPP\'s config folder (needed to log in on your behalf). Most pixel controllers do not offer SSH – leave step 2 off for those.</p></div></details>';
+  }
+  function wireExtra(m, d) {
+    const $ = (x) => m.body.querySelector(x);
+    if (d.kind === 'plug') {
+      const box = $('#hb-sched');
+      const wireRm = () => box.querySelectorAll('[data-rmsched]').forEach((b) => (b.onclick = () => b.closest('[data-sched]').remove()));
+      $('#hb-addsched').addEventListener('click', () => { box.insertAdjacentHTML('beforeend', schedRow()); wireRm(); });
+      wireRm();
+      return;
+    }
+    if (d.local || !$('#s-def')) return;
+    const sync = () => { $('#s-cust').style.opacity = $('#s-def').checked ? '.45' : '1'; $('#s-user').disabled = $('#s-pass').disabled = $('#s-def').checked; };
+    $('#s-def').addEventListener('change', sync); sync();
+    $('#s-test').addEventListener('click', async () => {
+      $('#s-res').textContent = 'Saving & testing…';
+      try {
+        await H.api('device_update', { id: d.id, patch: { ssh: collectExtra(m, d).ssh } });
+        const r = await H.api('ssh_test', { id: d.id });
+        $('#s-res').innerHTML = '<span class="hb-ok">' + icon('check', 14) + ' Logged in as ' + esc(r.user) + '</span>';
+      } catch (e) { $('#s-res').innerHTML = '<span class="hb-bad">' + esc(e.message) + '</span>'; }
+    });
+  }
+  function collectExtra(m, d) {
+    const $ = (x) => m.body.querySelector(x);
+    if (d.kind === 'plug') {
+      const rows = [...m.body.querySelectorAll('[data-sched]')];
+      return { schedules: rows.map((r) => ({ days: [...r.querySelectorAll('[data-day]')].filter((c) => c.checked).map((c) => +c.dataset.day), on: r.querySelector('[data-on]').value, off: r.querySelector('[data-off]').value, enforce: r.querySelector('[data-enf]').checked })) };
+    }
+    if (d.local || !$('#w-en')) return {};
+    const steps = [];
+    if ($('#w-api').checked) steps.push('api'); if ($('#w-ssh').checked) steps.push('ssh'); if ($('#w-pow').checked) steps.push('power');
+    const watch = { enabled: $('#w-en').checked, steps, failAfter: +$('#w-fail').value, bootGrace: +$('#w-boot').value, cooldown: +$('#w-cool').value, maxCycles: +$('#w-max').value };
+    if ($('#w-shared')) watch.allowShared = $('#w-shared').checked;
+    if ($('#w-froz')) { watch.frozen = $('#w-froz').checked; watch.freezeSec = +$('#w-fsec').value; }
+    return { watch, ssh: { enabled: $('#s-en').checked, useDefault: $('#s-def').checked, user: $('#s-user').value, pass: $('#s-pass').value, port: +$('#s-port').value, command: $('#s-cmd').value } };
   }
 
   async function showEvents() {

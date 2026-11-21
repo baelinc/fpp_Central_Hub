@@ -519,7 +519,12 @@
 
   async function testDialog(d) {
     let cur = null;
+    let models = [];
     try { cur = (await H.api('act', { id: d.id, cmd: 'testmode_get', args: {} })).data; } catch (e) { /* offline: dialog still opens */ }
+    try { models = (await H.api('act', { id: d.id, cmd: 'models', args: {} })).data || []; } catch (e) { /* no models */ }
+    const rng = (m) => m.start + '-' + (m.start + m.count - 1);
+    const curSet = (cur && cur.channelSet) || '';
+    const curModel = models.find((m) => rng(m) === curSet);
     const det = (S.status[d.id] || {}).detail || {};
     let on = !!(cur && Number(cur.enabled) === 1);
     const pat = cur && /Cycle/.test(cur.mode || '') ? 'cycle' : 'chase';
@@ -527,8 +532,16 @@
       (det.state === 'playing' ? '<div class="hb-warnbox">' + icon('alert', 16) + ' A playlist is playing on ' + esc(d.name) + '. The test pattern takes over the outputs until you stop it.</div>' : '') +
       '<div class="hb-two"><label>Pattern<select id="t-pat" class="hb-sel"><option value="chase"' + (pat === 'chase' ? ' selected' : '') + '>Chase – red, green, blue</option><option value="cycle"' + (pat === 'cycle' ? ' selected' : '') + '>Cycle – all pixels red, green, blue</option></select></label>' +
       '<label>Step time (ms)<input id="t-ms" type="number" min="100" max="10000" step="100" value="' + esc((cur && cur.cycleMS) || 1000) + '"></label></div>' +
-      '<label>Channels <small>(e.g. 1-1048576, or 1-510,1000-1500)</small><input id="t-ch" value="' + esc((cur && cur.channelSet) || '1-1048576') + '" autocomplete="off"></label>' +
+      '<label>Model <small>(picks the right channels for you)</small><select id="t-mod" class="hb-sel"><option value="">All channels</option>' + models.map((m, i) => '<option value="' + i + '"' + (curModel === m ? ' selected' : '') + '>' + esc(m.name) + ' (' + m.count + ' ch)</option>').join('') + '<option value="custom"' + (curSet && !curModel && curSet !== '1-1048576' ? ' selected' : '') + '>Custom channel range…</option></select></label>' +
+      '<label>Channels <small>(e.g. 1-1048576, or 1-510,1000-1500)</small><input id="t-ch" value="' + esc(curSet || '1-1048576') + '" autocomplete="off"></label>' +
       '<p class="hb-hint">Uses FPP\'s built-in test mode. Remember to press <b>Stop test</b> when you are done.</p></div>';
+    const wireModel = (m) => {
+      const sel = m.body.querySelector('#t-mod'), ch = m.body.querySelector('#t-ch');
+      const sync = () => { const v = sel.value; if (v === '') ch.value = '1-1048576'; else if (v !== 'custom') ch.value = rng(models[+v]); ch.readOnly = v !== 'custom' && v !== ''; ch.style.opacity = ch.readOnly ? '.6' : '1'; };
+      sel.addEventListener('change', sync);
+      ch.addEventListener('input', () => { if (!ch.readOnly) sel.value = 'custom'; });
+      const v = sel.value; ch.readOnly = v !== 'custom' && v !== ''; ch.style.opacity = ch.readOnly ? '.6' : '1';
+    };
     const show = (m) => { m.body.querySelector('#t-st').innerHTML = on ? '<span class="hb-ok">● Test pattern is running</span>' : 'Test mode is off'; };
     const run = async (m, enabled) => {
       const q = (s) => m.body.querySelector(s);
@@ -538,7 +551,7 @@
       } catch (e) { /* toast shown */ }
       return false;
     };
-    H.modal({ title: 'Test pattern – ' + d.name, html, onOpen: show,
+    H.modal({ title: 'Test pattern – ' + d.name, html, onOpen: (m) => { show(m); wireModel(m); },
       buttons: [{ label: 'Close', cls: 'ghost' }, { label: 'Stop test', onClick: (m) => run(m, false) }, { label: 'Start test', cls: 'primary', onClick: (m) => run(m, true) }] });
   }
 

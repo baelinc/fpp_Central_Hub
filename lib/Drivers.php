@@ -926,6 +926,22 @@ class HubDrivers
                 $v = max(0, min(100, (int) (isset($args['value']) ? $args['value'] : 0)));
                 $r = self::fppGet($cfg, $d, '/api/system/volume', 'POST', json_encode(array('volume' => $v)));
                 return array($r['code'] >= 200 && $r['code'] < 300, 'Volume ' . $v . '%', null);
+            case 'models':
+                $r = self::fppGet($cfg, $d, '/api/models');
+                $j = self::jsonBody($r);
+                if ($j === null) {
+                    return array(false, 'Could not load models', array());
+                }
+                $out = array();
+                foreach ($j as $m) {
+                    if (is_array($m) && !empty($m['Name']) && isset($m['StartChannel'], $m['ChannelCount']) && (int) $m['StartChannel'] > 0 && (int) $m['ChannelCount'] > 0) {
+                        $out[] = array('name' => (string) $m['Name'], 'start' => (int) $m['StartChannel'], 'count' => (int) $m['ChannelCount']);
+                    }
+                }
+                usort($out, function ($a, $b) {
+                    return strcasecmp($a['name'], $b['name']);
+                });
+                return array(true, '', $out);
             case 'lights_off':
                 // stop what is playing, cancel any test pattern, then FPP's own "All Lights Off" command to blank the outputs
                 $stop = self::fppGet($cfg, $d, '/api/playlists/stop');

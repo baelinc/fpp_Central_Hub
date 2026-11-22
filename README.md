@@ -78,3 +78,17 @@ If the update says *insufficient permission*, run once over SSH: `sudo chown -R 
 
 ## Author
 Johnathan Evans
+
+## Android app (side-load)
+
+A native Android app lives in the `android/` folder. It connects to the Hub on your network and shows the same cards (FPP players/remotes, controllers, counters, smart plugs) with playlist start/stop, volume, test patterns, plug switches, "Lights off" for everything, scenes, scanning and the event log.
+
+**Get the APK (no coding needed):**
+1. On GitHub open the repo's **Actions** tab, choose **Build Android app**, press **Run workflow**.
+2. When it finishes, open the run and download **FPP-Central-Hub-apk** (a zip containing `FPP-Central-Hub.apk`). To get a normal download link instead, push a tag named like `app-v1.0.0`; the APK is attached to a GitHub Release.
+3. Copy the APK to your phone, open it, and allow **Install unknown apps** for your browser or file manager when Android asks.
+4. Open the app, type the address of the FPP that has this plugin (for example `192.168.1.10`) and tap **Connect**. Your phone must be on the same Wi-Fi (or a VPN into it).
+
+**Build it yourself:** open the `android/` folder in Android Studio and run the app, or run `gradle assembleRelease` there.
+
+The app is signed with a key included in the repo so updates install over older versions. That is fine for side-loading but means it should not be published to Google Play as-is.

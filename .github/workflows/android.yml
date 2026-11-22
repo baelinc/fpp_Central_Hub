@@ -40,3 +40,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: FPP-Central-Hub.apk
+
+# rebuilt 2026-11-22

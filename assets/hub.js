@@ -211,7 +211,9 @@
       if (os.length) on = os.some((o) => o.on);
     }
     return '<span class="hb-lk">' + icon('plug', 14) + ' Powered by <b>' + esc(p.name) + '</b> <em class="' + (on === null ? 'u' : on ? 'on' : 'off') + '">' + (on === null ? '?' : on ? 'on' : 'off') + '</em></span>' +
-      (S.ro ? '' : '<button class="hb-btn sm" data-act="cycle" title="Turn the plug off, wait, then on again">' + icon('refresh', 12) + ' Power cycle</button>');
+      (S.ro ? '' : (on === true ? '' : '<button class="hb-btn sm primary" data-act="plugon" title="Turn the plug on so this device powers up">' + icon('power', 12) + ' Turn on</button>') +
+        (on === false ? '' : '<button class="hb-btn sm" data-act="plugoff" title="Turn the plug off (cuts power to this device)">' + icon('power', 12) + ' Turn off</button>') +
+        '<button class="hb-btn sm" data-act="cycle" title="Turn the plug off, wait, then on again">' + icon('refresh', 12) + ' Power cycle</button>');
   }
 
   function patchCard(card) {
@@ -536,6 +538,7 @@
       if (a === 'outlet') return act(d, 'toggle', { outlet: t.dataset.outlet });
       if (a === 'wled_toggle') return act(d, 'toggle');
       if (a === 'cycle') return powerCycle(d);
+      if (a === 'plugon' || a === 'plugoff') return linkedPower(d, a === 'plugon');
     } catch (err) { /* toast already shown */ }
   });
 
@@ -635,6 +638,18 @@
       { label: 'Hide from dashboard', icon: 'x', onClick: async () => { await H.api('device_update', { id: d.id, patch: { hidden: true } }); await reloadConfig(true); H.toast('Hidden – restore it in Settings → Devices', 'ok'); } },
       { label: 'Remove device', icon: 'trash', danger: true, onClick: () => removeDevice(d) },
     ]);
+  }
+
+  async function linkedPower(d, on) {
+    const lp = d.linkedPlug, p = lp && dev(lp.id);
+    if (!p) return H.toast('No plug is linked to this device', 'err');
+    const others = S.cfg.devices.filter((x) => x.id !== d.id && x.linkedPlug && x.linkedPlug.id === p.id && (x.linkedPlug.outlet === '*' || lp.outlet === '*' || x.linkedPlug.outlet === lp.outlet));
+    if (!on && !(await H.confirm('Cut power to ' + d.name + ' via "' + p.name + '"?' + (others.length ? ' WARNING: this plug also powers ' + others.map((o) => o.name).join(', ') + '.' : '') + ' The show on it will stop.', 'Turn off', true))) return;
+    try {
+      await act(p, on ? 'on' : 'off', { outlet: lp.outlet || '*' }, { quiet: true });
+      H.toast(d.name + (on ? ': power on – it may take a minute to boot' : ': power off'), 'ok');
+      S.cfg.devices.filter((x) => x.linkedPlug && x.linkedPlug.id === p.id).forEach((x) => { const c = document.querySelector('.hb-card[data-id="' + x.id + '"]'); if (c) patchCard(c); });
+    } catch (e) { H.toast('Failed: ' + e.message, 'err'); }
   }
 
   async function powerCycle(d) {

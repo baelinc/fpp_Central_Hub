@@ -191,6 +191,7 @@ fun DeviceCard(vm: HubViewModel, d: Device) {
                 "sensor" -> SensorBody(vm, d, st.detail)
                 else -> ControllerBody(vm, d, st.detail)
             }
+            LinkedPower(vm, d)
         }
     }
 }
@@ -379,4 +380,30 @@ private fun ControllerBody(vm: HubViewModel, d: Device, j: JSONObject) {
             OutlinedButton(onClick = { vm.act(d, "lights_off") }) { Text("Lights off") }
         }
     }
+}
+
+/** "Turn on / Turn off" for the smart plug that powers this device, so you don't have to find the plug card. */
+@Composable
+private fun LinkedPower(vm: HubViewModel, d: Device) {
+    val lp = d.raw.optJSONObject("linkedPlug") ?: return
+    val plug = vm.devices.firstOrNull { it.id == lp.optString("id") } ?: return
+    if (vm.readOnly) return
+    val outlet = lp.optString("outlet", "*").ifEmpty { "*" }
+    val args = { JSONObject().put("outlet", outlet) }
+    val outlets = vm.statuses[plug.id]?.detail?.optJSONArray("outlets").objects()
+        .filter { outlet == "*" || it.optString("id") == outlet }
+    val on: Boolean? = if (outlets.isEmpty()) null else outlets.any { it.optBoolean("on") }
+    var confirmOff by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Powered by " + plug.name + (if (on == null) "" else if (on) " (on)" else " (off)"), color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        if (on != true) Button(onClick = { vm.act(plug, "on", args()) }) { Text("Turn on") }
+        if (on != false) OutlinedButton(onClick = { confirmOff = true }) { Text("Turn off") }
+    }
+    if (confirmOff) AlertDialog(
+        onDismissRequest = { confirmOff = false },
+        title = { Text("Cut power?") },
+        text = { Text("Turn off ${plug.name}? ${d.name} will lose power and its show will stop.") },
+        confirmButton = { TextButton(onClick = { confirmOff = false; vm.act(plug, "off", args()) }) { Text("Turn off") } },
+        dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Cancel") } },
+    )
 }

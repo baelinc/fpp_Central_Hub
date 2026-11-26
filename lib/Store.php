@@ -8,7 +8,7 @@
  */
 class HubStore
 {
-    const VERSION = '1.7.2';
+    const VERSION = '1.8.0';
 
     public static function dir()
     {

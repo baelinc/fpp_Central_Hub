@@ -4,10 +4,10 @@
   const H = window.Hub, B = H.boot, esc = H.esc, icon = H.icon;
   const root = document.getElementById('hub-root');
   const KINDS = [
-    { k: 'fpp', title: 'Falcon Players', one: 'Falcon Player', ico: 'tv' },
-    { k: 'controller', title: 'Controllers', one: 'Controller', ico: 'cpu' },
-    { k: 'sensor', title: 'Counters & Sensors', one: 'Counter / sensor', ico: 'pulse' },
-    { k: 'plug', title: 'Smart Plugs', one: 'Smart plug', ico: 'plug' },
+    { k: 'fpp', title: 'Falcon Players', short: 'Players', one: 'Falcon Player', ico: 'tv' },
+    { k: 'controller', title: 'Controllers', short: 'Controllers', one: 'Controller', ico: 'cpu' },
+    { k: 'sensor', title: 'Counters & Sensors', short: 'Counters', one: 'Counter / sensor', ico: 'pulse' },
+    { k: 'plug', title: 'Smart Plugs', short: 'Plugs', one: 'Smart plug', ico: 'plug' },
   ];
   const NOPLAY = ['remote', 'bridge']; // modes with no playlists / scheduler of their own
   const FPP_PAGES = [['Status', 'index.php', 'pulse'], ['Playlists', 'playlists.php', 'list'], ['Schedule', 'scheduler.php', 'sun'], ['File manager', 'filemanager.php', 'download'], ['Channel outputs', 'channeloutputs.php', 'zap'], ['Test patterns', 'testing.php', 'zap'], ['Settings', 'settings.php', 'gear']];
@@ -23,7 +23,7 @@
       '<div class="hb-app">' +
       '<header class="hb-top">' +
       '<div class="hb-brand"><span class="hb-logo">' + H.logo(46) + '</span><div><h2 id="hb-title">Central Hub</h2><div class="hb-sub" id="hb-summary">Loading…</div></div></div>' +
-      '<label class="hb-search">' + icon('search', 16) + '<input id="hb-q" type="search" placeholder="Search devices, IPs, groups…" autocomplete="off"></label>' +
+      (B.kiosk ? '' : '<label class="hb-search">' + icon('search', 16) + '<input id="hb-q" type="search" placeholder="Search devices, IPs, groups…" autocomplete="off"></label>') +
       '<div class="hb-actions" id="hb-actions"></div>' +
       '</header>' +
       '<nav class="hb-tabs" id="hb-tabs"></nav>' +
@@ -31,11 +31,19 @@
       '<main id="hb-sections"></main>' +
       '<div class="hb-selbar" id="hb-selbar" hidden></div>' +
       '</div>';
-    document.getElementById('hb-q').addEventListener('input', H.debounce((e) => { S.q = e.target.value.trim().toLowerCase(); renderAll(); }, 150));
+    if (document.getElementById('hb-q')) document.getElementById('hb-q').addEventListener('input', H.debounce((e) => { S.q = e.target.value.trim().toLowerCase(); renderAll(); }, 150));
   }
 
   function renderActions() {
     const a = [];
+    if (B.kiosk) {
+      if (!S.ro) a.push('<button class="hb-ib kb-off" data-top="lightsoff" title="Stop everything and turn all lights off" aria-label="Lights off">' + icon('power', 20) + '</button>');
+      a.push('<button class="hb-ib" data-top="events" title="Activity" aria-label="Activity">' + icon('list', 20) + '</button>');
+      a.push('<span class="hb-clock" id="hb-clock"></span>');
+      a.push('<button class="hb-ib" data-top="full" title="Fullscreen" aria-label="Fullscreen">' + icon('max', 20) + '</button>');
+      document.getElementById('hb-actions').innerHTML = a.join('');
+      return;
+    }
     if (!S.ro) {
       a.push('<button class="hb-btn" data-top="scan" title="Search the network for devices">' + icon('refresh', 16) + '<span>Scan</span></button>');
       a.push('<button class="hb-btn" data-top="add">' + icon('plus', 16) + '<span>Add</span></button>');
@@ -73,12 +81,15 @@
     const devs = S.cfg.devices.filter((d) => !d.hidden);
     const count = (k) => devs.filter((d) => k === 'all' || d.kind === k).length;
     let h = '';
-    if (!B.kind) {
+    if (B.kiosk && !B.kind) {
+      KINDS.forEach((K) => { if (count(K.k)) h += '<button class="hb-tab' + (S.tab === K.k ? ' on' : '') + '" data-tab="' + K.k + '">' + icon(K.ico, 18) + '<span>' + K.short + '</span><em>' + count(K.k) + '</em></button>'; });
+      if (!S.ro && (S.cfg.scenes || []).length) h += '<button class="hb-tab' + (S.tab === 'scenes' ? ' on' : '') + '" data-tab="scenes">' + icon('layers', 18) + '<span>Scenes</span><em>' + S.cfg.scenes.length + '</em></button>';
+    } else if (!B.kind) {
       h += '<button class="hb-tab' + (S.tab === 'all' ? ' on' : '') + '" data-tab="all">All <em>' + count('all') + '</em></button>';
       KINDS.forEach((K) => { h += '<button class="hb-tab' + (S.tab === K.k ? ' on' : '') + '" data-tab="' + K.k + '">' + icon(K.ico, 15) + K.title + ' <em>' + count(K.k) + '</em></button>'; });
     }
     const groups = [...new Set(devs.map((d) => d.group).filter(Boolean))].sort();
-    if (groups.length) {
+    if (groups.length && !B.kiosk) {
       h += '<span class="hb-tabsep"></span>';
       groups.forEach((g) => { h += '<button class="hb-chipbtn' + (S.group === g ? ' on' : '') + '" data-group="' + esc(g) + '">' + esc(g) + '</button>'; });
     }
@@ -88,7 +99,7 @@
   function renderScenes() {
     const el = document.getElementById('hb-scenes');
     const sc = S.cfg.scenes || [];
-    if (!sc.length || S.ro || B.kind) { el.innerHTML = ''; return; }
+    if (!sc.length || S.ro || B.kind || B.kiosk) { el.innerHTML = ''; return; }
     el.innerHTML = '<span class="hb-lbl">' + icon('layers', 15) + ' Scenes</span>' + sc.map((s) => '<button class="hb-scene" data-scene="' + esc(s.id) + '">' + (s.icon ? esc(s.icon) + ' ' : '') + esc(s.name) + '<em>' + s.steps.length + '</em></button>').join('');
   }
 
@@ -139,18 +150,28 @@
     return '<article class="hb-card k-' + d.kind + ' t-' + esc(d.type) + ' unk" data-id="' + esc(d.id) + '">' +
       '<header class="hb-c-head"><label class="hb-sel-box"><input type="checkbox" data-selbox' + (S.sel.has(d.id) ? ' checked' : '') + '></label>' +
       '<div class="hb-c-ico">' + icon(d.kind === 'sensor' ? (d.type === 'lidar' ? 'car' : 'users') : K.ico, 20) + '</div>' +
-      '<div class="hb-c-title"><h3>' + esc(d.name) + '</h3><div class="hb-c-sub">' + sub + '</div></div>' +
+      '<div class="hb-c-title"><h3>' + esc(d.name) + '</h3><div class="hb-tsum" data-b="tsum"></div><div class="hb-c-sub">' + sub + '</div></div>' +
       '<div class="hb-c-state"><span class="hb-dot" data-b="dot"></span><span data-b="state">Checking…</span><small data-b="since"></small></div>' +
       (S.ro ? '' : '<button class="hb-ib" data-act="menu" aria-label="Device menu">' + icon('more') + '</button>') +
       '</header><div class="hb-c-body">' + body + '</div><footer class="hb-c-foot">' + foot + '</footer></article>';
   }
 
   function renderAll() {
+    if (B.kiosk && !B.kind) {
+      const have = KINDS.filter((K) => S.cfg.devices.some((d) => d.kind === K.k && !d.hidden)).map((K) => K.k);
+      if (!S.ro && (S.cfg.scenes || []).length) have.push('scenes');
+      if (have.indexOf(S.tab) < 0) S.tab = have[0] || 'all';
+    }
     renderTabs();
     renderScenes();
     const wrap = document.getElementById('hb-sections');
     let html = '';
     let any = false;
+    if (B.kiosk && S.tab === 'scenes') {
+      wrap.innerHTML = '<div class="hb-kscenes">' + (S.cfg.scenes || []).map((s) => '<button class="hb-scene" data-scene="' + esc(s.id) + '">' + icon('layers', 22) + '<span>' + (s.icon ? esc(s.icon) + ' ' : '') + esc(s.name) + '</span><em>' + s.steps.length + ' steps</em></button>').join('') + '</div>';
+      renderActions();
+      return;
+    }
     KINDS.forEach((K) => {
       const list = S.cfg.devices.filter((d) => d.kind === K.k && visible(d));
       if (!list.length) return;
@@ -236,6 +257,16 @@
     }
     setB(card, 'state', state);
     const dotEl = card.querySelector('[data-b="dot"]'); dotEl.className = 'hb-dot ' + dot;
+    if (B.kiosk) {
+      const g = (n) => { const e = card.querySelector('[data-b="' + n + '"]'); return e ? e.textContent.trim() : ''; };
+      let t = state;
+      if (online) {
+        if (d.kind === 'fpp') t = det.fppd === false ? 'FPPD stopped' : det.state === 'playing' ? '▶ ' + (det.playlist || det.sequence || 'Playing') : NOPLAY.indexOf(det.mode) >= 0 ? cap(det.mode) : 'Idle';
+        else if (d.kind === 'plug') t = det.state === 'on' ? 'On' + (det.power != null ? ' · ' + Math.round(det.power) + ' W' : '') : state;
+        else if (d.kind === 'sensor') t = g('big') && g('big') !== '–' ? g('big') + ' ' + g('bigl') : state;
+      }
+      setB(card, 'tsum', t);
+    }
     setB(card, 'since', st && st.since ? (online ? 'for ' : 'since ') + H.ago(st.since) : '');
 
     if (d.kind === 'fpp') {
@@ -437,7 +468,8 @@
   function setupLook() {
     S.ro = !!(B.kiosk && (B.readonly || S.cfg.options.kioskReadOnly));
     root.classList.toggle('ro', S.ro);
-    root.classList.toggle('compact', !!opt('compact'));
+    root.classList.toggle('compact', !!opt('compact') && !B.kiosk);
+    root.classList.toggle('kmode', !!B.kiosk);
     H.applyTheme(root, S.cfg.options);
     const t = document.getElementById('hb-title');
     if (t) t.textContent = 'Central Hub';
@@ -504,6 +536,29 @@
   root.addEventListener('focusin', (e) => {
     if (e.target.matches && e.target.matches('[data-b="pl"]')) { const c = e.target.closest('.hb-card'); const d = dev(c.dataset.id); if (S.playlists[d.id]) ensurePlaylists(d, c, true); }
   });
+
+  /* kiosk: tiles are compact; tapping one lifts the full card into a pop-up with all its options */
+  function openCard(card) {
+    const d = dev(card.dataset.id);
+    if (!d) return;
+    const ph = document.createComment('card');
+    card.before(ph);
+    card.classList.add('kopen');
+    H.modal({
+      title: d.name, html: card,
+      onClose() {
+        card.classList.remove('kopen');
+        if (ph.isConnected) { ph.replaceWith(card); patchCard(card); } else card.remove();
+      },
+    });
+  }
+  root.addEventListener('click', (e) => {
+    if (!B.kiosk) return;
+    const card = e.target.closest('.hb-card');
+    if (!card || card.classList.contains('kopen') || e.target.closest('a')) return;
+    e.stopPropagation();
+    openCard(card);
+  }, true);
 
   root.addEventListener('click', async (e) => {
     const t = e.target.closest('[data-top],[data-tab],[data-group],[data-scene],[data-sec],[data-act],[data-bulk]');

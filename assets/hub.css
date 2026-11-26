@@ -244,3 +244,53 @@ body.hb-idle.hb-page{cursor:none}
 .hub .hb-bbbtn{min-height:88px;border:0;border-radius:16px;padding:12px;color:#fff;font:700 16px/1.2 inherit;cursor:pointer;background:var(--bbc,var(--accent));box-shadow:0 6px 16px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;transition:transform .08s,filter .15s;text-shadow:0 1px 2px rgba(0,0,0,.45)}
 .hub .hb-bbbtn:hover{filter:brightness(1.1)}.hub .hb-bbbtn:active{transform:scale(.96)}
 .hub .hb-bbbtn.busy{opacity:.55;pointer-events:none}.hub .hb-bbbtn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ---------- kiosk / phone: tabbed, compact tiles, tap a tile for its options ---------- */
+.hub.kmode{padding:10px 10px 18px}
+body.hb-page .hub.kmode{padding:10px clamp(8px,1.5vw,24px) 18px}
+.hub.kmode .hb-top{gap:8px;margin-bottom:8px;flex-wrap:nowrap}
+.hub.kmode .hb-brand{min-width:0;gap:9px;flex:1}
+.hub.kmode .hb-logo{width:34px;height:34px}.hub.kmode .hb-logo svg{width:34px;height:34px;border-radius:10px}
+.hub.kmode .hb-brand h2{font-size:17px}
+.hub.kmode .hb-sub{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+.hub.kmode .hb-actions{gap:4px;flex-wrap:nowrap}
+.hub.kmode .hb-clock{font-size:16px;margin:0 2px}
+.hub.kmode .hb-ib{width:44px;height:44px}
+.hub.kmode .kb-off{color:var(--bad)}
+.hub.kmode .hb-tabs{position:sticky;top:0;z-index:20;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:6px 0 8px;margin:0 0 6px;background:linear-gradient(180deg,var(--bg2) 70%,transparent);scrollbar-width:none}
+.hub.kmode .hb-tabs::-webkit-scrollbar{display:none}
+.hub.kmode .hb-tab{flex:1 0 auto;justify-content:center;padding:11px 14px;font-size:14px;min-height:46px}
+.hub.kmode .hb-sec{margin:6px 0 4px}
+.hub.kmode .hb-sec-head{margin-bottom:8px}
+.hub.kmode .hb-sec-head h2{display:none}
+.hub.kmode .hb-sec-head .hb-count{color:var(--mut);font-size:12px}
+.hub.kmode .hb-grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:8px}
+.hub.kmode[style*="--hb-cols"] .hb-grid{grid-template-columns:repeat(var(--hb-cols),minmax(0,1fr))}
+.hub.kmode .hb-sel-box,.hub.kmode [data-act=menu]{display:none!important}
+/* tile */
+.hub.kmode .hb-card:not(.kopen){cursor:pointer;--r:12px;min-height:64px;-webkit-tap-highlight-color:transparent}
+.hub.kmode .hb-card:not(.kopen) .hb-c-body,.hub.kmode .hb-card:not(.kopen) .hb-c-foot,.hub.kmode .hb-card:not(.kopen) .hb-c-sub,.hub.kmode .hb-card:not(.kopen) .hb-c-state span:not(.hb-dot),.hub.kmode .hb-card:not(.kopen) .hb-c-state small{display:none}
+.hub.kmode .hb-card:not(.kopen) .hb-c-head{padding:11px 12px 11px 11px;gap:10px}
+.hub.kmode .hb-card:not(.kopen) .hb-c-ico{width:34px;height:34px;border-radius:10px}
+.hub.kmode .hb-card:not(.kopen) .hb-c-title h3{font-size:14.5px}
+.hub.kmode .hb-tsum{display:block;color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hub.kmode .hb-card.playing:not(.kopen) .hb-tsum{color:var(--play);font-weight:600}
+.hub.kmode .hb-card.is-on:not(.kopen) .hb-tsum{color:var(--k);font-weight:600}
+.hub.kmode .hb-card:active:not(.kopen){transform:scale(.98)}
+/* the pop-up card */
+.hb-tsum{display:none}
+.hb-modal .hb-card.kopen{border:0;box-shadow:none;background:none;backdrop-filter:none;overflow:visible}
+.hb-modal .hb-card.kopen::before{display:none}
+.hb-modal .hb-card.kopen .hb-c-head{display:none}
+.hb-modal .hb-card.kopen .hb-c-body{padding:0 0 10px}
+.hb-modal .hb-card.kopen .hb-c-foot{padding:10px 0 0}
+.hb-modal .hb-card.kopen .hb-btn,.hb-modal .hb-card.kopen .hb-sel{min-height:44px}
+.hb-modal .hb-card.kopen .hb-c-foot .hb-btn{flex:1 1 auto}
+/* scenes tab */
+.hb-kscenes{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding-top:6px}
+.hb-kscenes .hb-scene{flex-direction:column;justify-content:center;text-align:center;min-height:96px;padding:14px;font-size:15px;gap:6px}
+@media(max-width:560px){.hub.kmode .hb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hub.kmode .hb-brand h2{font-size:15px}.hub.kmode .hb-tab span{font-size:13px}.hub.kmode .hb-modal{max-height:96vh}}
+.hub.kmode .hb-brand>div:last-child{min-width:0;flex:1}
+.hub.kmode .hb-sub{max-width:none}
+.hub.kmode .hb-actions{flex:none}
+@media(max-width:560px){.hub.kmode .hb-clock{display:none}.hub.kmode .hb-ib{width:40px;height:40px}}

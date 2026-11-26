@@ -6,14 +6,7 @@
     "homeURL": "https://github.com/baelinc/fpp_Central_Hub",
     "srcURL": "https://github.com/baelinc/fpp_Central_Hub.git",
     "bugURL": "https://github.com/baelinc/fpp_Central_Hub/issues",
-    "versions": [
-        {
-            "minFPPVersion": "6.0",
-            "maxFPPVersion": "99.0",
-            "branch": "main",
-            "sha": ""
-        }
-    ],
+    "iconURL": "https://raw.githubusercontent.com/baelinc/fpp_Central_Hub/main/icon.png",
     "privacy": {
         "summary": "A dashboard that runs on your player and talks only to devices on your own network (other FPP players, lighting controllers, smart plugs, counters). The only internet contact is an optional update check against this plugin's GitHub page. Nothing is sent to the author or any third party.",
         "sends": [
@@ -76,5 +69,43 @@
         ],
         "closedCode": false,
         "other": "The Hub page and the phone/kiosk page have no login of their own: anyone who can reach your player's web address can view them. Kiosk/remote view hides reboot, shutdown, restart and reset and has an optional view-only mode. Nothing is recorded about who pressed a button. The Hub does not need an internet connection to work."
-    }
+    },
+    "versions": [
+        {
+            "minFPPVersion": "6.0",
+            "maxFPPVersion": "6.99",
+            "branch": "main",
+            "sha": ""
+        },
+        {
+            "minFPPVersion": "7.0",
+            "maxFPPVersion": "7.99",
+            "branch": "main",
+            "sha": ""
+        },
+        {
+            "minFPPVersion": "8.0",
+            "maxFPPVersion": "8.99",
+            "branch": "main",
+            "sha": ""
+        },
+        {
+            "minFPPVersion": "9.0",
+            "maxFPPVersion": "9.1",
+            "branch": "main",
+            "sha": ""
+        },
+        {
+            "minFPPVersion": "9.2",
+            "maxFPPVersion": "9.99",
+            "branch": "main",
+            "sha": ""
+        },
+        {
+            "minFPPVersion": "10.0",
+            "maxFPPVersion": "0",
+            "branch": "main",
+            "sha": ""
+        }
+    ]
 }

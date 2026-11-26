@@ -13,5 +13,68 @@
             "branch": "main",
             "sha": ""
         }
-    ]
+    ],
+    "privacy": {
+        "summary": "A dashboard that runs on your player and talks only to devices on your own network (other FPP players, lighting controllers, smart plugs, counters). The only internet contact is an optional update check against this plugin's GitHub page. Nothing is sent to the author or any third party.",
+        "sends": [
+            {
+                "what": "status requests and the commands you press (start/stop playlist, volume, test pattern, lights off, plug on/off, Big Buttons / Announcement Assistant triggers)",
+                "to": "the FPP players, controllers, smart plugs and counters you add or discover on your LAN",
+                "when": "status is polled while a Hub page is open and by the optional background watchdog; commands only when you press a button, run a scene, or the watchdog acts",
+                "why": "to show device status and control them"
+            },
+            {
+                "what": "short probe requests (HTTP and plug protocol) to every address in the ranges you configure",
+                "to": "addresses on your own network",
+                "when": "only when you run a scan (or have auto-scan on page load enabled)",
+                "why": "to discover devices"
+            },
+            {
+                "what": "a request for the plugin's VERSION file; and, if you press Update, a git pull of this plugin",
+                "to": "github.com / raw.githubusercontent.com (baelinc/fpp_Central_Hub)",
+                "when": "only when the page checks for updates or you press Update",
+                "why": "to tell you a new version exists and to install it. No personal data is sent beyond what any web request reveals (your IP address)."
+            },
+            {
+                "what": "SSH commands using the login you configure (default fpp / falcon) and any device passwords you saved",
+                "to": "your own FPP players",
+                "when": "only if the watchdog is enabled and a device stops responding, or you use the SSH test",
+                "why": "to restart the device's software as an automatic recovery step"
+            }
+        ],
+        "collects": [
+            {
+                "what": "your device list (names, addresses, types, notes), address ranges, scenes, options, and any device logins/passwords you enter (counter login, SSH password)",
+                "about": "household",
+                "keptDays": null,
+                "canDelete": true,
+                "where": "FPP config directory: fpp_Central_Hub.json (removed with the device or by deleting the file). Passwords are stored in this file in plain text and are never shown back in the web page."
+            },
+            {
+                "what": "an activity log (latest 200 events: device online/offline, commands run, watchdog steps) and monitor state",
+                "about": "household",
+                "keptDays": null,
+                "canDelete": true,
+                "where": "FPP config directory, plugin state file; the log can be cleared from the Hub"
+            }
+        ],
+        "sensors": [],
+        "remoteAccess": "none",
+        "systemChanges": [
+            {
+                "kind": "filesystem",
+                "what": "on install and at fppd start, sets the plugin's own folder to be owned by the fpp user (so it can update itself); writes its settings and state files in the FPP config directory"
+            },
+            {
+                "kind": "service",
+                "what": "starts a background monitor process with fppd (the optional watchdog) that can restart a stalled FPP player, run an SSH recovery command, or switch a linked smart plug off and on. It only acts on devices you enabled it for."
+            },
+            {
+                "kind": "device-control",
+                "what": "when you press the buttons, it can reboot, shut down, restart FPPD on, stop playback on, or cut power to the devices you add. These are never done automatically except by the watchdog settings above."
+            }
+        ],
+        "closedCode": false,
+        "other": "The Hub page and the phone/kiosk page have no login of their own: anyone who can reach your player's web address can view them. Kiosk/remote view hides reboot, shutdown, restart and reset and has an optional view-only mode. Nothing is recorded about who pressed a button. The Hub does not need an internet connection to work."
+    }
 }
